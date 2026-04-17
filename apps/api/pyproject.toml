@@ -1,0 +1,20 @@
+[project]
+name = "used-car-copilot-api"
+version = "0.1.0"
+description = "FastAPI backend for AI Used Car Decision Copilot"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110",
+  "psycopg[binary]>=3.1",
+  "pydantic>=2.6",
+  "uvicorn[standard]>=0.27"
+]
+
+[project.scripts]
+used-car-api = "app.main:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

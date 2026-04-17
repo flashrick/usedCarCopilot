@@ -58,5 +58,45 @@ The MVP should support one narrow data scope first:
 
 ## Current Status
 
-The repository currently contains planning documents only. The next implementation step is to scaffold the application structure and lock the initial data schema before building ingestion and retrieval.
+The repository now contains planning documents, seed data, and the first PostgreSQL-backed API scaffold. The next implementation step is to run the Postgres/pgvector database locally, apply the schema, ingest seed data, and validate the first retrieval endpoint.
 
+## Backend Quickstart
+
+Start PostgreSQL with pgvector:
+
+```bash
+docker compose up -d postgres
+```
+
+Install API dependencies:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e apps/api
+```
+
+Apply the schema:
+
+```bash
+python3 apps/api/scripts/migrate.py
+```
+
+Ingest seed data:
+
+```bash
+python3 apps/api/scripts/ingest_seed.py
+```
+
+Run the API:
+
+```bash
+uvicorn app.main:app --app-dir apps/api --reload
+```
+
+First endpoints:
+
+- `GET /health`
+- `GET /listings`
+- `GET /knowledge`
+- `POST /retrieve`

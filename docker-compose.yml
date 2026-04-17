@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: used-car-copilot-postgres
+    environment:
+      POSTGRES_DB: used_car_copilot
+      POSTGRES_USER: used_car
+      POSTGRES_PASSWORD: used_car
+    ports:
+      - "5432:5432"
+    volumes:
+      - used_car_copilot_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U used_car -d used_car_copilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  used_car_copilot_pgdata:
+

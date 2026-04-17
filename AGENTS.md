@@ -2,7 +2,7 @@
 
 ## Repository Status
 
-This repository is currently in the data-preparation stage for AI Used Car Decision Copilot. Product planning documents live in `documents/`, and the first seed dataset lives in `data/seed/`.
+This repository is currently in the early backend scaffolding stage for AI Used Car Decision Copilot. Product planning documents live in `documents/`, canonical seed data lives in `data/seed/`, and the first FastAPI/PostgreSQL backend lives in `apps/api/`.
 
 ## Project Intent
 
@@ -15,6 +15,8 @@ Treat this project as a portfolio-grade AI engineering system, not a generic cha
 - Do not add speculative commands to documentation unless they are backed by actual project files.
 - Treat `data/seed/` as the canonical input for ingestion and retrieval work.
 - Treat `data/raw/` as source exports that can be regenerated or normalized.
+- Keep database schema changes in `apps/api/migrations/`.
+- Keep backend seed ingestion code in `apps/api/app/ingestion/` and command wrappers in `apps/api/scripts/`.
 
 ## Documentation Conventions
 
@@ -31,19 +33,16 @@ Available data commands:
 - Run `python3 scripts/prepare_seed_data.py` to normalize `data/raw/turners_listings.jsonl` into `data/seed/listings.jsonl`.
 - Run `python3 scripts/validate_seed_data.py` to validate seed listings, knowledge sources, and eval cases.
 
-There are no application build, lint, test, or run commands yet. Do not claim app commands are available until package manifests, backend config, or scripts have been added.
+Available backend commands:
+
+- Run `docker compose up -d postgres` from the repo root to start PostgreSQL with pgvector.
+- Run `pip install -e apps/api` after activating a Python virtual environment to install API dependencies.
+- Run `python3 apps/api/scripts/migrate.py` from the repo root to apply the PostgreSQL schema.
+- Run `python3 apps/api/scripts/ingest_seed.py` from the repo root to load seed data.
+- Run `uvicorn app.main:app --app-dir apps/api --reload` from the repo root to start the API.
+
+There are no frontend build, lint, test, or run commands yet.
 
 ## Next Expected Work
 
-The next technical step is application scaffolding:
-
-- `apps/web`
-- `apps/api`
-- `packages/prompts`
-- `packages/retrieval`
-- `packages/evaluation`
-- `data/raw`
-- `data/processed`
-- `scripts`
-
-After scaffolding, update this file with real app commands and concrete path ownership.
+The next technical step is to run and verify the Postgres-backed backend locally, then add embedding generation and vector retrieval.

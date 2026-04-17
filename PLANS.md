@@ -6,9 +6,9 @@ Build an AI Used Car Decision Copilot that demonstrates real AI engineering abil
 
 ## Current Stage
 
-Stage: data preparation and validation.
+Stage: PostgreSQL backend scaffold verified.
 
-The repository now has planning documents plus a first seed dataset. Raw Turners listing data has been normalized into seed listings, model knowledge has been converted into JSONL, and eval cases are available for future retrieval and generation checks.
+The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Seed ingestion and a non-LLM retrieval endpoint have been run successfully against a local pgvector Postgres container.
 
 ## Milestones
 
@@ -18,11 +18,11 @@ The repository now has planning documents plus a first seed dataset. Raw Turners
 - Completed: create canonical `data/seed/` layout for listings, knowledge sources, and eval cases.
 - Completed: add data preparation and validation scripts.
 - Completed: validate current seed data with no coverage warnings.
-- Pending: scaffold repository structure for frontend, backend, data, scripts, and shared packages.
-- Pending: define initial database schema from the seed data contract.
+- Completed: scaffold repository structure for frontend placeholder, backend, shared packages, data, and scripts.
+- Completed: define initial PostgreSQL and pgvector schema from the seed data contract.
 - Completed: add manual Honda Civic seed listing rows to close the listing coverage gap.
-- Pending: build ingestion and embedding pipeline.
-- Pending: build retrieval API and debug output.
+- In progress: build ingestion and embedding pipeline. Seed ingestion is implemented and verified; embedding generation is pending.
+- In progress: build retrieval API and debug output. Structured retrieval is implemented and HTTP-verified; vector retrieval is pending.
 - Pending: build recommendation API with citation-aware JSON output.
 - Pending: build decision-workbench UI.
 - Pending: add evaluation workflow and reporting.
@@ -37,6 +37,8 @@ The repository now has planning documents plus a first seed dataset. Raw Turners
 - The first listing source is Turners data normalized into `data/seed/listings.jsonl`.
 - Canonical seed data lives in `data/seed/`; raw listing export lives in `data/raw/`.
 - The technical direction is FastAPI, Next.js, PostgreSQL, and pgvector.
+- The first backend uses FastAPI with psycopg and PostgreSQL, not SQLite.
+- The first retrieval endpoint is non-LLM and non-embedding so the database contract can be validated before vector search and generation.
 - The system must combine structured listing filters with unstructured semantic retrieval.
 - Recommendation claims must be grounded with evidence citations.
 - Evaluation is part of the MVP, not a later optional polish step.
@@ -49,9 +51,7 @@ The repository now has planning documents plus a first seed dataset. Raw Turners
 
 ## Blockers
 
-- No code scaffold exists yet.
-- No API contract exists yet.
-- No environment variable contract exists yet.
+- Embedding generation is not implemented yet.
 
 ## Next Skill
 
@@ -59,10 +59,11 @@ Recommended next skill: `repo-architect`, followed by `backend-implementer`, `fr
 
 ## Next Actions
 
-1. Create repository structure for `apps/web`, `apps/api`, `packages`, and application config.
-2. Define the first database schema for listings, knowledge documents, chunks, embeddings, and eval cases.
-3. Create `.env.example` with LLM, database, and app settings.
-4. Implement ingestion before recommendation generation.
+1. Add embedding generation for `document_chunks`.
+2. Store embeddings in `chunk_embeddings`.
+3. Add pgvector semantic retrieval alongside the existing structured retrieval.
+4. Add a first eval runner against `/retrieve`.
+5. Start frontend scaffolding once the retrieval response contract stabilizes.
 
 ## Acceptance Gates
 
@@ -76,3 +77,5 @@ Recommended next skill: `repo-architect`, followed by `backend-implementer`, `fr
 - Initial plan created from `documents/README.md`, `documents/used-car-rag-build-guide.md`, and `documents/linkedin-hr-pack.md`.
 - Added canonical seed data layout, data preparation script, validation script, and updated project state after data validation.
 - Added manual Honda Civic seed listing rows and cleared the listing coverage warning.
+- Added Postgres/pgvector backend scaffold, initial schema, seed ingestion command, and first structured retrieval API.
+- Verified Docker pgvector startup, migration, seed ingestion, `/health`, and `/retrieve` against local Postgres.

@@ -6,16 +6,21 @@ Build an AI Used Car Decision Copilot that demonstrates real AI engineering abil
 
 ## Current Stage
 
-Stage: project kickoff and documentation.
+Stage: data preparation and validation.
 
-The repository is documentation-only. The core product direction, MVP scope, architecture direction, data plan, and execution roadmap have been extracted from the original planning notes.
+The repository now has planning documents plus a first seed dataset. Raw Turners listing data has been normalized into seed listings, model knowledge has been converted into JSONL, and eval cases are available for future retrieval and generation checks.
 
 ## Milestones
 
 - Completed: choose portfolio project direction.
 - Completed: create startup documentation package.
+- Completed: create first raw Turners listing export.
+- Completed: create canonical `data/seed/` layout for listings, knowledge sources, and eval cases.
+- Completed: add data preparation and validation scripts.
+- Completed: validate current seed data with no coverage warnings.
 - Pending: scaffold repository structure for frontend, backend, data, scripts, and shared packages.
-- Pending: define initial schema and demo dataset format.
+- Pending: define initial database schema from the seed data contract.
+- Completed: add manual Honda Civic seed listing rows to close the listing coverage gap.
 - Pending: build ingestion and embedding pipeline.
 - Pending: build retrieval API and debug output.
 - Pending: build recommendation API with citation-aware JSON output.
@@ -28,6 +33,9 @@ The repository is documentation-only. The core product direction, MVP scope, arc
 - The project is a decision support system, not a generic chatbot.
 - The MVP should be narrow before it is broad.
 - Initial data scope should focus on Toyota, Mazda, and Honda.
+- The first market is Auckland, New Zealand.
+- The first listing source is Turners data normalized into `data/seed/listings.jsonl`.
+- Canonical seed data lives in `data/seed/`; raw listing export lives in `data/raw/`.
 - The technical direction is FastAPI, Next.js, PostgreSQL, and pgvector.
 - The system must combine structured listing filters with unstructured semantic retrieval.
 - Recommendation claims must be grounded with evidence citations.
@@ -35,16 +43,13 @@ The repository is documentation-only. The core product direction, MVP scope, arc
 
 ## Open Questions
 
-- Which city or market should the first demo dataset represent?
 - Should the project use OpenAI, Anthropic, or a provider-abstracted LLM interface for the first build?
-- Should the first dataset be hand-built, scraped from public sources, or mixed?
 - What deployment target should be chosen for the API: Render, Railway, Fly.io, or Azure App Service?
 - Should the public README and demo be written mainly in English, Chinese, or bilingual format?
 
 ## Blockers
 
 - No code scaffold exists yet.
-- No dataset or schema file exists yet.
 - No API contract exists yet.
 - No environment variable contract exists yet.
 
@@ -54,11 +59,10 @@ Recommended next skill: `repo-architect`, followed by `backend-implementer`, `fr
 
 ## Next Actions
 
-1. Create repository structure for `apps/web`, `apps/api`, `packages`, `data`, `scripts`, and `documents`.
+1. Create repository structure for `apps/web`, `apps/api`, `packages`, and application config.
 2. Define the first database schema for listings, knowledge documents, chunks, embeddings, and eval cases.
 3. Create `.env.example` with LLM, database, and app settings.
-4. Build a small seed dataset before writing retrieval logic.
-5. Implement ingestion before recommendation generation.
+4. Implement ingestion before recommendation generation.
 
 ## Acceptance Gates
 
@@ -70,4 +74,5 @@ Recommended next skill: `repo-architect`, followed by `backend-implementer`, `fr
 ## Change Log
 
 - Initial plan created from `documents/README.md`, `documents/used-car-rag-build-guide.md`, and `documents/linkedin-hr-pack.md`.
-
+- Added canonical seed data layout, data preparation script, validation script, and updated project state after data validation.
+- Added manual Honda Civic seed listing rows and cleared the listing coverage warning.

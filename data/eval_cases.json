@@ -1,0 +1,233 @@
+[
+  {
+    "id": "eval-001",
+    "query": "I need a reliable car under $12,000 for commuting in Auckland.",
+    "expected_filters": {
+      "max_price": 12000,
+      "usage": "commute",
+      "location": "Auckland",
+      "priority": "reliability"
+    },
+    "expected_candidate_models": ["Toyota Aqua", "Honda Fit", "Mazda2"],
+    "expected_risk_themes": ["high mileage", "service history", "maintenance cost", "accident repair"]
+  },
+  {
+    "id": "eval-002",
+    "query": "Which of these is better for city driving: Toyota Aqua, Honda Fit, or Mazda2?",
+    "expected_filters": {
+      "usage": "city",
+      "compare_models": ["Toyota Aqua", "Honda Fit", "Mazda2"],
+      "priority": "city_driving"
+    },
+    "expected_candidate_models": ["Toyota Aqua", "Honda Fit", "Mazda2"],
+    "expected_risk_themes": ["visibility", "small car practicality", "service history", "used import condition"]
+  },
+  {
+    "id": "eval-003",
+    "query": "I want a family SUV in Auckland and my budget is around $20,000.",
+    "expected_filters": {
+      "body_type": "SUV",
+      "usage": "family",
+      "location": "Auckland",
+      "target_price": 20000
+    },
+    "expected_candidate_models": ["Toyota RAV4", "Honda HR-V", "Mazda CX-5"],
+    "expected_risk_themes": ["service history", "tyres", "brakes", "accident repair", "running cost"]
+  },
+  {
+    "id": "eval-004",
+    "query": "Is a used Toyota Prius a good choice for Uber-style driving in Auckland?",
+    "expected_filters": {
+      "model": "Toyota Prius",
+      "usage": "rideshare",
+      "location": "Auckland",
+      "priority": "fuel_economy"
+    },
+    "expected_candidate_models": ["Toyota Prius"],
+    "expected_risk_themes": ["high mileage", "hybrid system condition", "service history", "seat wear", "brake wear"]
+  },
+  {
+    "id": "eval-005",
+    "query": "I only want Honda. Which Honda model is most practical for daily commuting and grocery runs?",
+    "expected_filters": {
+      "brand": "Honda",
+      "usage": "daily_commute",
+      "secondary_usage": "errands",
+      "priority": "practicality"
+    },
+    "expected_candidate_models": ["Honda Fit", "Honda Civic", "Honda HR-V"],
+    "expected_risk_themes": ["service history", "cargo practicality", "fuel cost", "maintenance cost"]
+  },
+  {
+    "id": "eval-006",
+    "query": "Between Mazda3 and Honda Civic, which is the better first car for a new driver?",
+    "expected_filters": {
+      "compare_models": ["Mazda3", "Honda Civic"],
+      "usage": "first_car",
+      "driver_profile": "new_driver"
+    },
+    "expected_candidate_models": ["Mazda3", "Honda Civic"],
+    "expected_risk_themes": ["insurance cost", "visibility", "service history", "accident repair", "tyre condition"]
+  },
+  {
+    "id": "eval-007",
+    "query": "What should I check before buying a used Toyota Aqua in Auckland?",
+    "expected_filters": {
+      "model": "Toyota Aqua",
+      "location": "Auckland",
+      "ownership_stage": "pre_purchase",
+      "intent": "inspection"
+    },
+    "expected_candidate_models": ["Toyota Aqua"],
+    "expected_risk_themes": ["service history", "accident repair", "battery or hybrid condition", "tyres", "brakes", "theft-related concerns"]
+  },
+  {
+    "id": "eval-008",
+    "query": "I drive mostly short distances. Should I get a Honda Fit or Toyota Aqua?",
+    "expected_filters": {
+      "compare_models": ["Honda Fit", "Toyota Aqua"],
+      "usage": "short_city_trips",
+      "priority": "efficiency"
+    },
+    "expected_candidate_models": ["Honda Fit", "Toyota Aqua"],
+    "expected_risk_themes": ["fuel economy", "interior space", "service history", "small car comfort"]
+  },
+  {
+    "id": "eval-009",
+    "query": "I need something comfortable for highway driving between Auckland and Hamilton. Budget under $18,000.",
+    "expected_filters": {
+      "max_price": 18000,
+      "usage": "highway",
+      "route_profile": "intercity",
+      "location": "Auckland"
+    },
+    "expected_candidate_models": ["Honda Civic", "Mazda3", "Toyota Prius"],
+    "expected_risk_themes": ["road noise", "seat comfort", "service history", "tyres", "brake condition"]
+  },
+  {
+    "id": "eval-010",
+    "query": "Which is likely to be cheaper to own: Mazda CX-5 or Toyota RAV4?",
+    "expected_filters": {
+      "compare_models": ["Mazda CX-5", "Toyota RAV4"],
+      "intent": "ownership_cost",
+      "body_type": "SUV"
+    },
+    "expected_candidate_models": ["Mazda CX-5", "Toyota RAV4"],
+    "expected_risk_themes": ["fuel cost", "maintenance cost", "tyres", "service intervals", "repair cost"]
+  },
+  {
+    "id": "eval-011",
+    "query": "I have two adults and one child. Is Honda HR-V big enough for everyday family use?",
+    "expected_filters": {
+      "model": "Honda HR-V",
+      "usage": "family",
+      "household_size": 3,
+      "priority": "space_practicality"
+    },
+    "expected_candidate_models": ["Honda HR-V"],
+    "expected_risk_themes": ["rear seat space", "boot space", "child seat practicality", "service history"]
+  },
+  {
+    "id": "eval-012",
+    "query": "I care most about low running costs. Which should I shortlist: Toyota Aqua, Prius, Fit, or Mazda2?",
+    "expected_filters": {
+      "compare_models": ["Toyota Aqua", "Toyota Prius", "Honda Fit", "Mazda2"],
+      "priority": "low_running_cost"
+    },
+    "expected_candidate_models": ["Toyota Aqua", "Toyota Prius", "Honda Fit", "Mazda2"],
+    "expected_risk_themes": ["fuel cost", "maintenance cost", "service history", "wear items", "hybrid-related checks"]
+  },
+  {
+    "id": "eval-013",
+    "query": "What are the main risks when buying a high-mileage Mazda3?",
+    "expected_filters": {
+      "model": "Mazda3",
+      "intent": "risk_assessment",
+      "mileage_band": "high"
+    },
+    "expected_candidate_models": ["Mazda3"],
+    "expected_risk_themes": ["high mileage", "service history", "suspension wear", "brakes", "transmission behaviour", "oil leaks"]
+  },
+  {
+    "id": "eval-014",
+    "query": "I want a used car under $10,000 and I do not want an SUV. What are the safer choices from Toyota, Honda, and Mazda?",
+    "expected_filters": {
+      "max_price": 10000,
+      "exclude_body_type": "SUV",
+      "brands": ["Toyota", "Honda", "Mazda"],
+      "priority": "safer_choice"
+    },
+    "expected_candidate_models": ["Toyota Aqua", "Toyota Prius", "Honda Fit", "Honda Civic", "Mazda2", "Mazda3"],
+    "expected_risk_themes": ["older age", "high mileage", "service history", "safety equipment variation", "accident repair"]
+  },
+  {
+    "id": "eval-015",
+    "query": "Is Mazda2 too small if I sometimes carry a child and shopping bags?",
+    "expected_filters": {
+      "model": "Mazda2",
+      "usage": "small_family_errands",
+      "household_size": 3,
+      "priority": "practicality"
+    },
+    "expected_candidate_models": ["Mazda2"],
+    "expected_risk_themes": ["rear seat space", "boot space", "child seat fit", "small car comfort"]
+  },
+  {
+    "id": "eval-016",
+    "query": "I want the most reliable Toyota hybrid for daily use. Should I look at Aqua or Prius?",
+    "expected_filters": {
+      "brand": "Toyota",
+      "fuel_type": "hybrid",
+      "compare_models": ["Toyota Aqua", "Toyota Prius"],
+      "usage": "daily_use",
+      "priority": "reliability"
+    },
+    "expected_candidate_models": ["Toyota Aqua", "Toyota Prius"],
+    "expected_risk_themes": ["service history", "hybrid system condition", "high mileage", "accident repair", "intended use match"]
+  },
+  {
+    "id": "eval-017",
+    "query": "Which of the listed Mazda and Honda models are better for people who want a slightly more premium feel?",
+    "expected_filters": {
+      "brands": ["Mazda", "Honda"],
+      "priority": "premium_feel"
+    },
+    "expected_candidate_models": ["Mazda3", "Mazda CX-5", "Honda Civic", "Honda HR-V"],
+    "expected_risk_themes": ["trim differences", "feature variation by year", "service history", "used condition"]
+  },
+  {
+    "id": "eval-018",
+    "query": "I do not know much about cars. Give me the simplest low-risk used car choice for Auckland from these brands.",
+    "expected_filters": {
+      "location": "Auckland",
+      "priority": "low_risk",
+      "user_profile": "novice_buyer",
+      "brands": ["Toyota", "Honda", "Mazda"]
+    },
+    "expected_candidate_models": ["Toyota Aqua", "Honda Fit", "Mazda3"],
+    "expected_risk_themes": ["service history", "pre-purchase inspection", "maintenance cost", "accident repair", "avoid neglected examples"]
+  },
+  {
+    "id": "eval-019",
+    "query": "For a used CX-5, what inspection points matter most before purchase?",
+    "expected_filters": {
+      "model": "Mazda CX-5",
+      "ownership_stage": "pre_purchase",
+      "intent": "inspection"
+    },
+    "expected_candidate_models": ["Mazda CX-5"],
+    "expected_risk_themes": ["service history", "suspension", "tyres", "brakes", "accident repair", "warning lights"]
+  },
+  {
+    "id": "eval-020",
+    "query": "I want a hatchback that is cheap to run and easy to park in Auckland. Which models should I compare?",
+    "expected_filters": {
+      "body_type": "hatchback",
+      "priority": "cheap_to_run",
+      "secondary_priority": "easy_parking",
+      "location": "Auckland"
+    },
+    "expected_candidate_models": ["Toyota Aqua", "Honda Fit", "Mazda2", "Toyota Prius"],
+    "expected_risk_themes": ["fuel economy", "service history", "small-car practicality", "used condition", "parking damage"]
+  }
+]

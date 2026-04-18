@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from psycopg.types.json import Jsonb
+from sqlalchemy import and_, or_, select
 
-from app.db.connection import get_connection
+from app.db.connection import get_session
+from app.db.orm import KnowledgeSourceRecord, ListingRecord, RequestLogRecord
 from app.models.schemas import RetrieveRequest
 
 
@@ -79,78 +80,73 @@ def model_pairs(models: list[str]) -> list[tuple[str, str]]:
 def retrieve(request: RetrieveRequest) -> dict[str, Any]:
     filters = infer_filters(request)
     conditions = []
-    params: list[Any] = []
 
     if filters["location"]:
-        conditions.append("location = %s")
-        params.append(filters["location"])
+        conditions.append(ListingRecord.location == filters["location"])
     if filters["max_price"] is not None:
-        conditions.append("(price IS NOT NULL AND price <= %s)")
-        params.append(filters["max_price"])
+        conditions.append(and_(ListingRecord.price.is_not(None), ListingRecord.price <= filters["max_price"]))
     if filters["brand"]:
-        conditions.append("brand = %s")
-        params.append(filters["brand"])
+        conditions.append(ListingRecord.brand == filters["brand"])
     if filters["body_type"]:
-        conditions.append("body_type = %s")
-        params.append(filters["body_type"])
+        conditions.append(ListingRecord.body_type == filters["body_type"])
 
     pairs = model_pairs(filters["models"])
     if pairs:
-        model_conditions = []
-        for brand, model in pairs:
-            model_conditions.append("(brand = %s AND model = %s)")
-            params.extend([brand, model])
-        conditions.append("(" + " OR ".join(model_conditions) + ")")
+        conditions.append(
+            or_(
+                *[
+                    and_(ListingRecord.brand == brand, ListingRecord.model == model)
+                    for brand, model in pairs
+                ]
+            )
+        )
 
-    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
     limit = filters["limit"]
 
-    with get_connection() as connection:
-        listings = connection.execute(
-            f"""
-            SELECT listing_id, title, brand, model, year, price, mileage,
-                   transmission, fuel_type, seller_type, location, body_type,
-                   source, source_url, description
-            FROM listings
-            {where_clause}
-            ORDER BY
-              price IS NULL,
-              price ASC,
-              mileage IS NULL,
-              mileage ASC,
-              year DESC NULLS LAST
-            LIMIT %s
-            """,
-            [*params, limit],
-        ).fetchall()
+    with get_session() as session:
+        statement = (
+            select(ListingRecord)
+            .order_by(
+                ListingRecord.price.is_(None),
+                ListingRecord.price.asc(),
+                ListingRecord.mileage.is_(None),
+                ListingRecord.mileage.asc(),
+                ListingRecord.year.desc().nulls_last(),
+            )
+            .limit(limit)
+        )
+        if conditions:
+            statement = statement.where(and_(*conditions))
 
-        candidate_pairs = sorted({(row["brand"], row["model"]) for row in listings})
-        knowledge = []
+        listings = list(session.scalars(statement))
+
+        candidate_pairs = sorted({(row.brand, row.model) for row in listings})
+        knowledge: list[KnowledgeSourceRecord] = []
         if candidate_pairs:
-            knowledge_conditions = []
-            knowledge_params: list[Any] = []
-            for brand, model in candidate_pairs:
-                knowledge_conditions.append("(brand = %s AND model = %s)")
-                knowledge_params.extend([brand, model])
-            knowledge = connection.execute(
-                f"""
-                SELECT source_id, source_type, source_channel, title, brand, model,
-                       year_range, market, tags, summary, text, evidence_level,
-                       ownership_stage
-                FROM knowledge_sources
-                WHERE {" OR ".join(knowledge_conditions)}
-                ORDER BY evidence_level DESC, source_id ASC
-                LIMIT %s
-                """,
-                [*knowledge_params, max(limit * 3, 10)],
-            ).fetchall()
+            knowledge = list(
+                session.scalars(
+                    select(KnowledgeSourceRecord)
+                    .where(
+                        or_(
+                            *[
+                                and_(KnowledgeSourceRecord.brand == brand, KnowledgeSourceRecord.model == model)
+                                for brand, model in candidate_pairs
+                            ]
+                        )
+                    )
+                    .order_by(KnowledgeSourceRecord.evidence_level.desc(), KnowledgeSourceRecord.source_id.asc())
+                    .limit(max(limit * 3, 10))
+                )
+            )
 
-        connection.execute(
-            """
-            INSERT INTO request_logs (endpoint, query, filters, listing_count, knowledge_count)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            ("/retrieve", request.query, Jsonb(filters), len(listings), len(knowledge)),
+        session.add(
+            RequestLogRecord(
+                endpoint="/retrieve",
+                query=request.query,
+                filters=filters,
+                listing_count=len(listings),
+                knowledge_count=len(knowledge),
+            )
         )
 
     return {

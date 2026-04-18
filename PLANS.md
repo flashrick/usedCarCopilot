@@ -8,7 +8,7 @@ Build an AI Used Car Decision Copilot that demonstrates real AI engineering abil
 
 Stage: PostgreSQL backend scaffold verified.
 
-The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Seed ingestion and a non-LLM retrieval endpoint have been run successfully against a local pgvector Postgres container.
+The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access now uses SQLAlchemy ORM sessions and mapped records. Seed ingestion and a non-LLM retrieval endpoint have been run successfully against a local pgvector Postgres container.
 
 ## Milestones
 
@@ -38,6 +38,7 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 - Canonical seed data lives in `data/seed/`; raw listing export lives in `data/raw/`.
 - The technical direction is FastAPI, Next.js, PostgreSQL, and pgvector.
 - The first backend uses FastAPI with psycopg and PostgreSQL, not SQLite.
+- Runtime database access uses SQLAlchemy ORM; raw SQL is reserved for migration files and minimal probes.
 - The first retrieval endpoint is non-LLM and non-embedding so the database contract can be validated before vector search and generation.
 - The system must combine structured listing filters with unstructured semantic retrieval.
 - Recommendation claims must be grounded with evidence citations.
@@ -79,3 +80,4 @@ Recommended next skill: `repo-architect`, followed by `backend-implementer`, `fr
 - Added manual Honda Civic seed listing rows and cleared the listing coverage warning.
 - Added Postgres/pgvector backend scaffold, initial schema, seed ingestion command, and first structured retrieval API.
 - Verified Docker pgvector startup, migration, seed ingestion, `/health`, and `/retrieve` against local Postgres.
+- Replaced runtime psycopg query calls with SQLAlchemy ORM models, sessions, ingestion, and retrieval queries.

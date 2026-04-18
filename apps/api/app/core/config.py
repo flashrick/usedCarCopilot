@@ -17,7 +17,7 @@ def get_settings() -> Settings:
     return Settings(
         database_url=os.getenv(
             "DATABASE_URL",
-            "postgresql://used_car:used_car@127.0.0.1:5432/used_car_copilot",
+            "postgresql+psycopg://used_car:used_car@127.0.0.1:5432/used_car_copilot",
         ),
         seed_data_dir=Path(os.getenv("SEED_DATA_DIR", "data/seed")),
         api_host=os.getenv("API_HOST", "0.0.0.0"),

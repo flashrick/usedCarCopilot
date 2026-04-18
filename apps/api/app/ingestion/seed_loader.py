@@ -4,9 +4,16 @@ import json
 from pathlib import Path
 from typing import Any
 
-from psycopg.types.json import Jsonb
+from sqlalchemy import func, select
 
-from app.db.connection import get_connection
+from app.db.connection import get_session
+from app.db.orm import (
+    DocumentChunkRecord,
+    EvalCaseRecord,
+    IngestionRunRecord,
+    KnowledgeSourceRecord,
+    ListingRecord,
+)
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -46,152 +53,92 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
     if not isinstance(eval_cases, list):
         raise ValueError("eval_cases.json must contain a JSON array")
 
-    with get_connection() as connection:
-        run_id = connection.execute(
-            "INSERT INTO ingestion_runs (status, message) VALUES (%s, %s) RETURNING id",
-            ("running", "seed ingestion started"),
-        ).fetchone()["id"]
+    with get_session() as session:
+        run = IngestionRunRecord(status="running", message="seed ingestion started")
+        session.add(run)
+        session.flush()
 
         try:
             for row in listings:
-                connection.execute(
-                    """
-                    INSERT INTO listings (
-                      listing_id, title, brand, model, year, price, mileage,
-                      transmission, fuel_type, seller_type, location, body_type,
-                      source, source_url, description, raw_payload, updated_at
+                session.merge(
+                    ListingRecord(
+                        listing_id=row["listing_id"],
+                        title=row["title"],
+                        brand=row["brand"],
+                        model=row["model"],
+                        year=row.get("year"),
+                        price=row.get("price"),
+                        mileage=row.get("mileage"),
+                        transmission=row.get("transmission"),
+                        fuel_type=row.get("fuel_type"),
+                        seller_type=row.get("seller_type"),
+                        location=row.get("location"),
+                        body_type=row.get("body_type"),
+                        source=row["source"],
+                        source_url=row.get("source_url"),
+                        description=row.get("description"),
+                        raw_payload=row,
+                        updated_at=func.now(),
                     )
-                    VALUES (
-                      %(listing_id)s, %(title)s, %(brand)s, %(model)s, %(year)s,
-                      %(price)s, %(mileage)s, %(transmission)s, %(fuel_type)s,
-                      %(seller_type)s, %(location)s, %(body_type)s, %(source)s,
-                      %(source_url)s, %(description)s, %(raw_payload)s, now()
-                    )
-                    ON CONFLICT (listing_id) DO UPDATE SET
-                      title = EXCLUDED.title,
-                      brand = EXCLUDED.brand,
-                      model = EXCLUDED.model,
-                      year = EXCLUDED.year,
-                      price = EXCLUDED.price,
-                      mileage = EXCLUDED.mileage,
-                      transmission = EXCLUDED.transmission,
-                      fuel_type = EXCLUDED.fuel_type,
-                      seller_type = EXCLUDED.seller_type,
-                      location = EXCLUDED.location,
-                      body_type = EXCLUDED.body_type,
-                      source = EXCLUDED.source,
-                      source_url = EXCLUDED.source_url,
-                      description = EXCLUDED.description,
-                      raw_payload = EXCLUDED.raw_payload,
-                      updated_at = now()
-                    """,
-                    {**row, "raw_payload": Jsonb(row)},
                 )
 
             for row in knowledge_sources:
-                connection.execute(
-                    """
-                    INSERT INTO knowledge_sources (
-                      source_id, source_type, source_channel, title, brand, model,
-                      year_range, market, tags, summary, text, evidence_level,
-                      ownership_stage, raw_payload, updated_at
+                session.merge(
+                    KnowledgeSourceRecord(
+                        source_id=row["source_id"],
+                        source_type=row["source_type"],
+                        source_channel=row["source_channel"],
+                        title=row["title"],
+                        brand=row["brand"],
+                        model=row["model"],
+                        year_range=row.get("year_range"),
+                        market=row.get("market"),
+                        tags=row.get("tags", []),
+                        summary=row.get("summary"),
+                        text=row["text"],
+                        evidence_level=row.get("evidence_level"),
+                        ownership_stage=row.get("ownership_stage"),
+                        raw_payload=row,
+                        updated_at=func.now(),
                     )
-                    VALUES (
-                      %(source_id)s, %(source_type)s, %(source_channel)s, %(title)s,
-                      %(brand)s, %(model)s, %(year_range)s, %(market)s, %(tags)s,
-                      %(summary)s, %(text)s, %(evidence_level)s,
-                      %(ownership_stage)s, %(raw_payload)s, now()
-                    )
-                    ON CONFLICT (source_id) DO UPDATE SET
-                      source_type = EXCLUDED.source_type,
-                      source_channel = EXCLUDED.source_channel,
-                      title = EXCLUDED.title,
-                      brand = EXCLUDED.brand,
-                      model = EXCLUDED.model,
-                      year_range = EXCLUDED.year_range,
-                      market = EXCLUDED.market,
-                      tags = EXCLUDED.tags,
-                      summary = EXCLUDED.summary,
-                      text = EXCLUDED.text,
-                      evidence_level = EXCLUDED.evidence_level,
-                      ownership_stage = EXCLUDED.ownership_stage,
-                      raw_payload = EXCLUDED.raw_payload,
-                      updated_at = now()
-                    """,
-                    {**row, "raw_payload": Jsonb(row)},
                 )
 
                 for index, chunk in enumerate(chunk_text(row["text"])):
                     chunk_id = f"{row['source_id']}-chunk-{index:03d}"
-                    connection.execute(
-                        """
-                        INSERT INTO document_chunks (
-                          chunk_id, source_id, chunk_index, text, token_count, metadata
+                    session.merge(
+                        DocumentChunkRecord(
+                            chunk_id=chunk_id,
+                            source_id=row["source_id"],
+                            chunk_index=index,
+                            text=chunk,
+                            token_count=len(chunk.split()),
+                            metadata_={"brand": row["brand"], "model": row["model"], "tags": row["tags"]},
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (chunk_id) DO UPDATE SET
-                          text = EXCLUDED.text,
-                          token_count = EXCLUDED.token_count,
-                          metadata = EXCLUDED.metadata
-                        """,
-                        (
-                            chunk_id,
-                            row["source_id"],
-                            index,
-                            chunk,
-                            len(chunk.split()),
-                            Jsonb({"brand": row["brand"], "model": row["model"], "tags": row["tags"]}),
-                        ),
                     )
 
             for row in eval_cases:
-                connection.execute(
-                    """
-                    INSERT INTO eval_cases (
-                      id, query, expected_filters, expected_candidate_models,
-                      expected_risk_themes, raw_payload, updated_at
+                session.merge(
+                    EvalCaseRecord(
+                        id=row["id"],
+                        query=row["query"],
+                        expected_filters=row.get("expected_filters", {}),
+                        expected_candidate_models=row.get("expected_candidate_models", []),
+                        expected_risk_themes=row.get("expected_risk_themes", []),
+                        raw_payload=row,
+                        updated_at=func.now(),
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, now())
-                    ON CONFLICT (id) DO UPDATE SET
-                      query = EXCLUDED.query,
-                      expected_filters = EXCLUDED.expected_filters,
-                      expected_candidate_models = EXCLUDED.expected_candidate_models,
-                      expected_risk_themes = EXCLUDED.expected_risk_themes,
-                      raw_payload = EXCLUDED.raw_payload,
-                      updated_at = now()
-                    """,
-                    (
-                        row["id"],
-                        row["query"],
-                        Jsonb(row.get("expected_filters", {})),
-                        row.get("expected_candidate_models", []),
-                        row.get("expected_risk_themes", []),
-                        Jsonb(row),
-                    ),
                 )
 
-            connection.execute(
-                """
-                UPDATE ingestion_runs
-                SET status = %s,
-                    completed_at = now(),
-                    listings_count = %s,
-                    knowledge_count = %s,
-                    eval_count = %s,
-                    message = %s
-                WHERE id = %s
-                """,
-                ("completed", len(listings), len(knowledge_sources), len(eval_cases), "seed ingestion completed", run_id),
-            )
+            run.status = "completed"
+            run.completed_at = session.scalar(select(func.now()))
+            run.listings_count = len(listings)
+            run.knowledge_count = len(knowledge_sources)
+            run.eval_count = len(eval_cases)
+            run.message = "seed ingestion completed"
         except Exception as exc:
-            connection.execute(
-                """
-                UPDATE ingestion_runs
-                SET status = %s, completed_at = now(), message = %s
-                WHERE id = %s
-                """,
-                ("failed", str(exc), run_id),
-            )
+            run.status = "failed"
+            run.completed_at = session.scalar(select(func.now()))
+            run.message = str(exc)
             raise
 
     return {

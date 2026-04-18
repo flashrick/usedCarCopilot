@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Listing(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     listing_id: str
     title: str
     brand: str
@@ -24,6 +26,8 @@ class Listing(BaseModel):
 
 
 class KnowledgeSource(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     source_id: str
     source_type: str
     source_channel: str
@@ -55,4 +59,3 @@ class RetrieveResponse(BaseModel):
     listings: list[Listing]
     knowledge: list[KnowledgeSource]
     debug: dict[str, Any]
-

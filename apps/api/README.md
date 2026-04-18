@@ -2,12 +2,14 @@
 
 FastAPI backend for AI Used Car Decision Copilot.
 
+Runtime database access uses SQLAlchemy ORM with the psycopg v3 PostgreSQL driver. Raw SQL is reserved for migration files under `apps/api/migrations/`.
+
 ## Prerequisites
 
 - Python 3.11+
 - Docker Compose
 - PostgreSQL with pgvector, provided by the root `docker-compose.yml`
-- Default database URL: `postgresql://used_car:used_car@127.0.0.1:5432/used_car_copilot`
+- Default database URL: `postgresql+psycopg://used_car:used_car@127.0.0.1:5432/used_car_copilot`
 
 ## Setup
 

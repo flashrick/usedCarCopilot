@@ -3,21 +3,24 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-import psycopg
-from psycopg.rows import dict_row
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 
 
+engine = create_engine(get_settings().database_url, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
 @contextmanager
-def get_connection() -> Iterator[psycopg.Connection]:
-    connection = psycopg.connect(get_settings().database_url, row_factory=dict_row)
+def get_session() -> Iterator[Session]:
+    session = SessionLocal()
     try:
-        yield connection
-        connection.commit()
+        yield session
+        session.commit()
     except Exception:
-        connection.rollback()
+        session.rollback()
         raise
     finally:
-        connection.close()
-
+        session.close()

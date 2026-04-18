@@ -17,6 +17,7 @@ Treat this project as a portfolio-grade AI engineering system, not a generic cha
 - Treat `data/raw/` as source exports that can be regenerated or normalized.
 - Keep database schema changes in `apps/api/migrations/`.
 - Keep backend seed ingestion code in `apps/api/app/ingestion/` and command wrappers in `apps/api/scripts/`.
+- Runtime database access must use SQLAlchemy ORM sessions and mapped records from `apps/api/app/db/orm.py`. Keep raw SQL limited to migrations or short health-check style probes.
 
 ## Documentation Conventions
 

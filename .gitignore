@@ -17,3 +17,4 @@ data/**/__pycache__/
 data/**/*.py[cod]
 data/tmp/
 data/cache/
+learning/

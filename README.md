@@ -62,6 +62,8 @@ The repository now contains planning documents, seed data, and the first Postgre
 
 ## Backend Quickstart
 
+The API uses SQLAlchemy ORM for runtime database access with PostgreSQL and pgvector. Raw SQL is kept in migration files.
+
 Start PostgreSQL with pgvector:
 
 ```bash

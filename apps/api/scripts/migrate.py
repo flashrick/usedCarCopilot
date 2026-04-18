@@ -6,17 +6,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.db.connection import get_connection
+from app.db.connection import engine
 
 
 def main() -> None:
     migration_path = Path(__file__).resolve().parents[1] / "migrations" / "001_init.sql"
     sql = migration_path.read_text(encoding="utf-8")
-    with get_connection() as connection:
-        connection.execute(sql)
+    with engine.begin() as connection:
+        connection.exec_driver_sql(sql)
     print(f"Applied migration: {migration_path}")
 
 
 if __name__ == "__main__":
     main()
-

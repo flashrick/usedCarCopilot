@@ -75,6 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_document_chunks_source_id ON document_chunks (sou
 CREATE TABLE IF NOT EXISTS chunk_embeddings (
   chunk_id TEXT PRIMARY KEY REFERENCES document_chunks(chunk_id) ON DELETE CASCADE,
   embedding_model TEXT NOT NULL,
+  content_hash TEXT,
   embedding vector(1536) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -105,4 +106,3 @@ CREATE TABLE IF NOT EXISTS request_logs (
   latency_ms INTEGER,
   error TEXT
 );
-

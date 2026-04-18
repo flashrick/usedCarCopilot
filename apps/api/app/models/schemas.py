@@ -43,6 +43,18 @@ class KnowledgeSource(BaseModel):
     ownership_stage: str | None = None
 
 
+class RetrievedChunk(BaseModel):
+    chunk_id: str
+    source_id: str
+    source_title: str
+    source_type: str
+    brand: str
+    model: str
+    evidence_level: str | None = None
+    text: str
+    similarity: float | None = None
+
+
 class RetrieveRequest(BaseModel):
     query: str | None = None
     max_price: int | None = None
@@ -58,4 +70,5 @@ class RetrieveResponse(BaseModel):
     applied_filters: dict[str, Any]
     listings: list[Listing]
     knowledge: list[KnowledgeSource]
+    chunks: list[RetrievedChunk]
     debug: dict[str, Any]

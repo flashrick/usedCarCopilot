@@ -2,10 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, bindparam, or_, select
+from sqlalchemy.orm import Session
 
 from app.db.connection import get_session
-from app.db.orm import KnowledgeSourceRecord, ListingRecord, RequestLogRecord
+from app.db.orm import (
+    ChunkEmbeddingRecord,
+    DocumentChunkRecord,
+    KnowledgeSourceRecord,
+    ListingRecord,
+    RequestLogRecord,
+    Vector,
+)
+from app.embedding.service import LocalHashEmbeddingProvider
 from app.models.schemas import RetrieveRequest
 
 
@@ -77,6 +86,69 @@ def model_pairs(models: list[str]) -> list[tuple[str, str]]:
     return pairs
 
 
+def retrieve_semantic_chunks(
+    session: Session,
+    query: str | None,
+    filters: dict[str, Any],
+    candidate_pairs: list[tuple[str, str]],
+    limit: int,
+) -> list[dict[str, Any]]:
+    if not query or not query.strip():
+        return []
+
+    provider = LocalHashEmbeddingProvider()
+    query_embedding = provider.embed(query)
+    distance = ChunkEmbeddingRecord.embedding.op("<=>")(
+        bindparam("query_embedding", query_embedding, type_=Vector(provider.dimensions))
+    ).label("distance")
+
+    conditions = []
+    scoped_pairs = model_pairs(filters["models"]) or candidate_pairs
+    if scoped_pairs:
+        conditions.append(
+            or_(
+                *[
+                    and_(KnowledgeSourceRecord.brand == brand, KnowledgeSourceRecord.model == model)
+                    for brand, model in scoped_pairs
+                ]
+            )
+        )
+    elif filters["brand"]:
+        conditions.append(KnowledgeSourceRecord.brand == filters["brand"])
+
+    statement = (
+        select(DocumentChunkRecord, KnowledgeSourceRecord, distance)
+        .join(ChunkEmbeddingRecord, ChunkEmbeddingRecord.chunk_id == DocumentChunkRecord.chunk_id)
+        .join(KnowledgeSourceRecord, KnowledgeSourceRecord.source_id == DocumentChunkRecord.source_id)
+        .order_by(distance.asc(), DocumentChunkRecord.chunk_id.asc())
+        .limit(max(limit * 3, 8))
+    )
+    if conditions:
+        statement = statement.where(and_(*conditions))
+
+    rows = session.execute(statement).all()
+
+    chunks: list[dict[str, Any]] = []
+    for chunk, source, distance_value in rows:
+        similarity = None
+        if distance_value is not None:
+            similarity = round(max(0.0, 1.0 - float(distance_value)), 4)
+        chunks.append(
+            {
+                "chunk_id": chunk.chunk_id,
+                "source_id": source.source_id,
+                "source_title": source.title,
+                "source_type": source.source_type,
+                "brand": source.brand,
+                "model": source.model,
+                "evidence_level": source.evidence_level,
+                "text": chunk.text,
+                "similarity": similarity,
+            }
+        )
+    return chunks
+
+
 def retrieve(request: RetrieveRequest) -> dict[str, Any]:
     filters = infer_filters(request)
     conditions = []
@@ -139,13 +211,21 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
                 )
             )
 
+        semantic_chunks = retrieve_semantic_chunks(
+            session=session,
+            query=request.query,
+            filters=filters,
+            candidate_pairs=candidate_pairs,
+            limit=limit,
+        )
+
         session.add(
             RequestLogRecord(
                 endpoint="/retrieve",
                 query=request.query,
                 filters=filters,
                 listing_count=len(listings),
-                knowledge_count=len(knowledge),
+                knowledge_count=len(semantic_chunks) or len(knowledge),
             )
         )
 
@@ -154,9 +234,12 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
         "applied_filters": filters,
         "listings": listings,
         "knowledge": knowledge,
+        "chunks": semantic_chunks,
         "debug": {
             "candidate_models": [f"{brand} {model}" for brand, model in candidate_pairs],
-            "retrieval_mode": "structured_filters_plus_model_linked_knowledge",
-            "embedding_search_enabled": False,
+            "retrieval_mode": "structured_filters_plus_semantic_chunks",
+            "embedding_search_enabled": bool(semantic_chunks),
+            "embedding_model": LocalHashEmbeddingProvider.model,
+            "semantic_chunk_count": len(semantic_chunks),
         },
     }

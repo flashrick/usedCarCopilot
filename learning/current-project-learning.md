@@ -1,8 +1,47 @@
 # 当前项目学习指南
 
-这份文档的目的，是帮助你从零开始理解这个项目目前已经有哪些文件、用了哪些技术、每个技术解决什么问题，以及接下来应该怎么学习。它不是产品介绍，而是一份项目学习地图。
+这份文档用于帮助你理解 `usedCarCopilot` 当前已经完成了什么、每个目录和技术点的作用、怎样在本地跑起来，以及下一步应该学什么。
 
-项目当前状态：已经有产品文档、种子数据、数据校验脚本、FastAPI 后端、PostgreSQL + pgvector 数据库、SQLAlchemy ORM 数据访问层，以及一个初版检索接口。前端和真正的 embedding / LLM 生成还没有开始。
+它不是产品宣传文案，而是项目学习地图。读完后，你应该能回答三个问题：
+
+1. 这个项目现在做到哪一步了。
+2. 后端数据、数据库、embedding、检索 API 是怎么连起来的。
+3. 下一步开发 eval runner 和 recommendation API 前，需要先补哪些知识。
+
+## 0. 当前状态
+
+项目当前处于早期后端实现阶段。
+
+已经完成：
+
+- 产品和技术规划文档。
+- canonical seed data：listing、knowledge source、eval cases。
+- seed data 校验脚本。
+- FastAPI 后端骨架。
+- PostgreSQL + pgvector 本地数据库。
+- SQLAlchemy ORM 数据访问层。
+- seed ingestion：把 `data/seed/` 导入数据库。
+- document chunk 生成。
+- 本地 deterministic embedding 生成。
+- `chunk_embeddings` 向量存储。
+- `/retrieve` 结构化 listing 检索。
+- `/retrieve` pgvector semantic chunk 检索。
+- 请求 debug metadata。
+
+还没有完成：
+
+- 外部 embedding provider，例如 OpenAI embeddings。
+- LLM recommendation generation。
+- citation-aware recommendation JSON。
+- eval runner 和 eval report。
+- Next.js 前端。
+- 部署。
+
+当前最重要的下一步：
+
+1. 给 `/retrieve` 增加 eval runner。
+2. 用 `data/seed/eval_cases.json` 检查候选车型和风险主题覆盖率。
+3. 再做 `/recommend`，生成 citation-aware JSON。
 
 ## 1. 项目一句话理解
 
@@ -11,22 +50,27 @@
 用户输入类似：
 
 ```text
-我想买一辆 15000 纽币以内、省油、适合通勤的 Honda 或 Toyota。
+I want a reliable Toyota hybrid for daily commuting under 16000. Should I consider Aqua or Prius?
 ```
 
-系统应该做的事情不是随便聊天，而是：
+系统最终应该做的事情不是泛泛聊天，而是：
 
-1. 理解用户的预算、品牌、车型、用途等需求。
-2. 从二手车 listing 数据里筛选候选车辆。
-3. 从车型知识库里找出相关风险、维修成本、口碑和购买建议。
-4. 组合 listing 和知识证据，给出推荐、风险提示和引用来源。
-5. 用 eval cases 检查检索和回答质量。
+1. 解析预算、品牌、车型、用途等需求。
+2. 从 listing 数据中筛选候选车辆。
+3. 从车型知识库中检索相关风险、维修建议和购买建议。
+4. 把 listing facts 和 knowledge evidence 合并。
+5. 输出推荐、风险提示、引用来源和 debug 信息。
+6. 用 eval cases 检查检索和回答质量。
 
-目前项目已经完成了第 1 个基础版本：可以把 seed data 导入 PostgreSQL，并通过 API 根据结构化条件检索 listing 和车型知识。
+当前项目已经跑通了前半段：
 
-## 2. 当前目录结构
+```text
+seed data -> PostgreSQL -> embeddings -> pgvector retrieval -> /retrieve response
+```
 
-下面是当前项目最重要的目录。
+还没有进入 LLM 生成阶段。
+
+## 2. 当前核心目录
 
 ```text
 usedCarCopilot/
@@ -34,20 +78,15 @@ usedCarCopilot/
 ├── AGENTS.md
 ├── PLANS.md
 ├── docker-compose.yml
-├── .env.example
 ├── documents/
 ├── data/
 │   ├── raw/
-│   ├── seed/
-│   └── processed/
+│   └── seed/
 ├── scripts/
 ├── apps/
 │   ├── api/
 │   └── web/
 ├── packages/
-│   ├── prompts/
-│   ├── retrieval/
-│   └── evaluation/
 └── learning/
 ```
 
@@ -55,109 +94,152 @@ usedCarCopilot/
 
 `README.md`
 
-这是 GitHub 首页会看到的项目说明。它解释项目目标、MVP 范围、计划技术栈、当前状态和后端快速启动方式。
+面向 GitHub 读者的项目说明。当前已经写明后端可以做 seed ingestion、local chunk embedding、pgvector semantic retrieval。
 
 `AGENTS.md`
 
-这是给 Codex / agent 使用的本地工作规则。它记录了项目边界、当前状态、不要随便改哪些文件、Git 操作注意事项等。
+给 Codex / agent 使用的项目规则。重点是编辑边界和技术约束。
+
+关键规则：
+
+- 不要随便改原始规划文档。
+- canonical seed data 在 `data/seed/`。
+- 数据库 schema 变更放在 `apps/api/migrations/`。
+- 后端 ingestion 代码放在 `apps/api/app/ingestion/`。
+- 运行时数据库访问必须用 SQLAlchemy ORM。
 
 `PLANS.md`
 
-这是长期执行计划。它记录已经完成什么、下一步做什么、当前阻塞点和决策。
+长期执行计划。当前状态是：
+
+```text
+Stage: Hybrid retrieval backend scaffold verified.
+```
+
+它记录了当前已完成本地 embedding 和 pgvector semantic retrieval，下一步是 eval runner。
 
 `docker-compose.yml`
 
-用于启动本地 PostgreSQL + pgvector 数据库。这个项目目前依赖 Docker Compose 来启动数据库。
+启动本地 PostgreSQL + pgvector。
 
-`.env.example`
+核心命令：
 
-环境变量模板。当前最重要的是数据库连接字符串：
-
-```text
-DATABASE_URL=postgresql+psycopg://used_car:used_car@127.0.0.1:5432/used_car_copilot
+```bash
+docker compose up -d postgres
 ```
 
 ### `documents/`
 
-这是项目早期产品和技术规划文档所在位置。
+项目产品和技术规划。
 
-重要文件：
+建议阅读顺序：
 
-- `documents/product-brief.md`：产品目标。
-- `documents/mvp-spec.md`：MVP 具体功能。
-- `documents/technical-architecture.md`：技术架构。
-- `documents/data-and-evaluation-plan.md`：数据和评估计划。
-- `documents/delivery-roadmap.md`：开发路线。
-- `documents/README.md`：最早的原始项目说明。
-- `documents/used-car-rag-build-guide.md`：原始 RAG 构建指南。
-- `documents/linkedin-hr-pack.md`：作品集 / 求职包装材料。
+1. `documents/product-brief.md`
+2. `documents/mvp-spec.md`
+3. `documents/technical-architecture.md`
+4. `documents/data-and-evaluation-plan.md`
+5. `documents/delivery-roadmap.md`
 
-学习时应该先看这些文档，理解“为什么要做这个项目”。
+原始笔记包括：
+
+- `documents/README.md`
+- `documents/used-car-rag-build-guide.md`
+- `documents/linkedin-hr-pack.md`
+
+这些原始笔记不要随便重写。
 
 ### `data/`
 
-这是数据目录。
+数据目录。
 
 `data/raw/`
 
-原始数据。比如从 Turners 等二手车网站收集下来的原始 listing。
+原始导出数据，可以重新生成或重新规范化。
 
 `data/seed/`
 
-目前后端真正使用的种子数据。
+当前后端真正使用的 canonical seed data。
 
 重要文件：
 
-- `data/seed/listings.jsonl`：车辆 listing 数据。
-- `data/seed/knowledge_sources.jsonl`：车型知识、维修风险、购买建议等文本知识。
-- `data/seed/eval_cases.json`：用于评估检索质量的测试问题。
+- `data/seed/listings.jsonl`
+- `data/seed/knowledge_sources.jsonl`
+- `data/seed/eval_cases.json`
 
-`data/processed/`
+`listings.jsonl`
 
-未来用于放处理后的数据，目前还不是主要工作区。
+车辆 listing。包含价格、里程、车型、地点、车身类型、燃料类型、seller description 等。
+
+`knowledge_sources.jsonl`
+
+车型知识。包含 maintenance notes、owner experience、buying guide、risk themes 等。
+
+`eval_cases.json`
+
+后续 eval runner 要用的测试问题。每条 case 包含：
+
+- 用户 query。
+- expected filters。
+- expected candidate models。
+- expected risk themes。
 
 ### `scripts/`
 
-这是根目录脚本。
+根目录数据脚本。
 
 `scripts/prepare_seed_data.py`
 
-把原始 listing 数据处理成 seed data 格式。
+把 raw listing 数据规范化成 seed listing。
 
 `scripts/validate_seed_data.py`
 
-检查 seed data 是否格式正确、字段是否完整、车型覆盖是否合理。
+校验 seed data。
 
-学习这个项目时，这个脚本很重要。它告诉你系统期待什么样的数据。
+常用命令：
+
+```bash
+python3 scripts/validate_seed_data.py
+```
+
+当前验证结果应该包含这些模型：
+
+```text
+Honda Civic, Honda Fit, Honda HR-V,
+Mazda CX-5, Mazda Mazda2, Mazda Mazda3,
+Toyota Aqua, Toyota Prius, Toyota RAV4
+```
 
 ### `apps/api/`
 
-这是当前最核心的实现部分：Python FastAPI 后端。
+当前最核心的实现目录。
 
 ```text
 apps/api/
 ├── README.md
 ├── pyproject.toml
 ├── migrations/
-│   └── 001_init.sql
+│   ├── 001_init.sql
+│   └── 002_chunk_embedding_content_hash.sql
 ├── scripts/
 │   ├── migrate.py
-│   └── ingest_seed.py
+│   ├── ingest_seed.py
+│   └── build_embeddings.py
 └── app/
     ├── main.py
+    ├── api/
     ├── core/
     ├── db/
-    ├── models/
+    ├── embedding/
     ├── ingestion/
-    ├── retrieval/
-    └── api/
+    ├── models/
+    └── retrieval/
 ```
 
 `apps/api/pyproject.toml`
 
 定义后端 Python 包和依赖。
 
-当前主要依赖：
+主要依赖：
 
 - `fastapi`
 - `uvicorn`
@@ -167,9 +249,9 @@ apps/api/
 
 `apps/api/migrations/001_init.sql`
 
-数据库建表 SQL。虽然运行时已经改成 ORM，但建表仍然用 migration SQL 文件。
+创建基础 schema。
 
-当前表包括：
+核心表：
 
 - `ingestion_runs`
 - `listings`
@@ -179,160 +261,423 @@ apps/api/
 - `eval_cases`
 - `request_logs`
 
+`apps/api/migrations/002_chunk_embedding_content_hash.sql`
+
+给 `chunk_embeddings` 增加 `content_hash`。
+
+作用：如果 chunk 文本没有变化，重复运行 embedding 脚本时可以跳过，不重复写入。
+
 `apps/api/scripts/migrate.py`
 
-读取 migration SQL，并把表创建到 PostgreSQL。
+现在会按文件名顺序执行 `apps/api/migrations/*.sql`，不再只执行一个 migration。
 
 `apps/api/scripts/ingest_seed.py`
 
-把 `data/seed/` 里的 JSONL / JSON 数据导入数据库。
+把 seed data 导入 PostgreSQL。
 
-`apps/api/app/main.py`
+它会导入：
+
+- listings
+- knowledge sources
+- document chunks
+- eval cases
+
+`apps/api/scripts/build_embeddings.py`
+
+为 `document_chunks` 生成本地 embedding，并写入 `chunk_embeddings`。
+
+当前使用的 embedding model 名称：
+
+```text
+local-hash-embedding-v1
+```
+
+注意：这是开发阶段的 deterministic local embedding provider。它不等于生产级 embedding，也不等于 OpenAI embedding。它的作用是让 pgvector pipeline 在没有外部 API key 的情况下先跑通。
+
+### `apps/api/app/main.py`
 
 FastAPI 应用入口。
 
-`apps/api/app/api/routes.py`
+### `apps/api/app/api/routes.py`
 
-定义 HTTP API 路由。
+HTTP 路由定义。
 
-当前 endpoint：
+当前 endpoints：
 
 - `GET /health`
 - `GET /listings`
 - `GET /knowledge`
 - `POST /retrieve`
 
-`apps/api/app/core/config.py`
+### `apps/api/app/core/config.py`
 
-读取配置，例如 `DATABASE_URL`。
+读取配置。
 
-`apps/api/app/db/connection.py`
+当前最重要的是：
+
+```text
+DATABASE_URL
+SEED_DATA_DIR
+API_HOST
+API_PORT
+```
+
+默认数据库连接：
+
+```text
+postgresql+psycopg://used_car:used_car@127.0.0.1:5432/used_car_copilot
+```
+
+### `apps/api/app/db/connection.py`
 
 创建 SQLAlchemy engine 和 session。
 
-这是后端连接数据库的入口。
+你需要理解：
 
-`apps/api/app/db/orm.py`
+- `create_engine(...)`
+- `sessionmaker(...)`
+- `get_session()`
+- commit / rollback / close
 
-定义 SQLAlchemy ORM model。
+### `apps/api/app/db/orm.py`
 
-简单理解：这里的 Python class 对应数据库里的 table。
+SQLAlchemy ORM model。
 
-例如：
+可以理解为：Python class 对应数据库 table。
 
-- `ListingRecord` 对应 `listings` 表。
-- `KnowledgeSourceRecord` 对应 `knowledge_sources` 表。
-- `DocumentChunkRecord` 对应 `document_chunks` 表。
-- `ChunkEmbeddingRecord` 对应 `chunk_embeddings` 表。
-- `EvalCaseRecord` 对应 `eval_cases` 表。
-- `RequestLogRecord` 对应 `request_logs` 表。
+主要 class：
 
-`apps/api/app/models/schemas.py`
+- `ListingRecord`
+- `KnowledgeSourceRecord`
+- `DocumentChunkRecord`
+- `ChunkEmbeddingRecord`
+- `EvalCaseRecord`
+- `RequestLogRecord`
+- `IngestionRunRecord`
 
-定义 Pydantic schema。
+这里还有一个自定义类型：
 
-简单理解：Pydantic schema 用来描述 API 的输入输出格式。
-
-`apps/api/app/ingestion/seed_loader.py`
-
-导入 seed data 的核心逻辑。
-
-它会：
-
-1. 读取 `listings.jsonl`。
-2. 读取 `knowledge_sources.jsonl`。
-3. 读取 `eval_cases.json`。
-4. 写入 PostgreSQL。
-5. 记录一次 `ingestion_runs`。
-
-`apps/api/app/retrieval/service.py`
-
-当前检索逻辑。
-
-它会：
-
-1. 从用户 query 里推断一些 filter，例如车型、预算、body type。
-2. 查询 `listings` 表找到候选车辆。
-3. 根据候选车辆的 brand / model 查询 `knowledge_sources`。
-4. 把请求记录到 `request_logs`。
-5. 返回 listing、knowledge 和 debug 信息。
-
-注意：当前检索还没有使用 embedding，也没有调用 LLM。它是一个先验证数据库和 API contract 的基础版本。
-
-### `apps/web/`
-
-未来的前端目录。
-
-目前只有 README，还没有 Next.js 实现。
-
-### `packages/`
-
-未来共享包目录。
-
-计划用途：
-
-- `packages/prompts/`：prompt 模板。
-- `packages/retrieval/`：可复用检索逻辑。
-- `packages/evaluation/`：评估逻辑。
-
-目前这些目录还没有真实代码。
-
-### `learning/`
-
-学习文档目录。
-
-你现在正在看的这份文档就在这里。
-
-## 3. 当前系统如何工作
-
-可以把当前后端理解成下面这条链路：
-
-```text
-data/seed/*.jsonl / *.json
-        |
-        v
-apps/api/scripts/ingest_seed.py
-        |
-        v
-SQLAlchemy ORM
-        |
-        v
-PostgreSQL + pgvector
-        |
-        v
-FastAPI endpoints
-        |
-        v
-GET /listings, GET /knowledge, POST /retrieve
+```python
+class Vector(UserDefinedType):
 ```
 
-如果用户调用 `POST /retrieve`，当前流程是：
+它把 Python 的 `list[float]` 转成 pgvector 可以接收的字符串格式：
 
 ```text
-用户 query
-   |
-   v
+[0.1,0.2,0.3]
+```
+
+也支持从数据库返回值转回 Python list。
+
+### `apps/api/app/models/schemas.py`
+
+Pydantic schema。
+
+当前重要 schema：
+
+- `Listing`
+- `KnowledgeSource`
+- `RetrievedChunk`
+- `RetrieveRequest`
+- `RetrieveResponse`
+
+`RetrieveResponse` 当前包含：
+
+```text
+query
+applied_filters
+listings
+knowledge
+chunks
+debug
+```
+
+其中 `chunks` 是 semantic retrieval 返回的证据片段。
+
+### `apps/api/app/ingestion/seed_loader.py`
+
+seed ingestion 核心逻辑。
+
+流程：
+
+```text
+read listings.jsonl
+read knowledge_sources.jsonl
+read eval_cases.json
+write listings
+write knowledge_sources
+split knowledge text into document_chunks
+write eval_cases
+write ingestion_runs
+```
+
+当前 chunk 逻辑比较简单：按 word count 切分，每 chunk 默认最多 180 words。
+
+### `apps/api/app/embedding/service.py`
+
+本地 embedding provider。
+
+核心 class：
+
+```python
+class LocalHashEmbeddingProvider:
+```
+
+它做的事情：
+
+1. 把文本切成 token。
+2. 加入一些汽车领域词扩展，例如 `commute -> fuel/economy/urban`。
+3. 用 hash 把 token 映射到 1536 维向量桶。
+4. 做 L2 normalization。
+
+优点：
+
+- 不需要网络。
+- 不需要 API key。
+- 每次结果稳定。
+- 可以让 pgvector retrieval pipeline 先跑通。
+
+缺点：
+
+- 不是语义模型。
+- 召回质量有限。
+- 之后应该替换或抽象成真正 embedding provider。
+
+### `apps/api/app/embedding/builder.py`
+
+embedding 构建逻辑。
+
+核心函数：
+
+```python
+build_chunk_embeddings(limit: int | None = None)
+```
+
+它会：
+
+1. 查询所有 `document_chunks`。
+2. 计算每个 chunk 的 `content_hash`。
+3. 如果已有 embedding 且 model/hash 都没变，就跳过。
+4. 否则生成 embedding 并写入 `chunk_embeddings`。
+
+### `apps/api/app/retrieval/service.py`
+
+当前 retrieval 核心逻辑。
+
+它包含两部分：
+
+1. 结构化 listing 检索。
+2. pgvector semantic chunk 检索。
+
+整体流程：
+
+```text
 RetrieveRequest
    |
    v
 infer_filters()
    |
    v
-查询 listings
+query listings with structured filters
    |
    v
-根据候选 listing 的 brand/model 查询 knowledge_sources
+collect candidate brand/model pairs
    |
    v
-写入 request_logs
+query model-linked knowledge_sources
+   |
+   v
+embed query with LocalHashEmbeddingProvider
+   |
+   v
+pgvector cosine distance search over chunk_embeddings
+   |
+   v
+write request_logs
    |
    v
 RetrieveResponse
 ```
 
-这个版本的意义是先让数据、数据库、API、schema 和检索返回格式跑通。之后再加入 embedding、向量检索、reranking 和 LLM 生成。
+当前 debug 信息示例：
 
-## 4. 当前用了哪些技术
+```json
+{
+  "candidate_models": ["Toyota Aqua", "Toyota Prius"],
+  "retrieval_mode": "structured_filters_plus_semantic_chunks",
+  "embedding_search_enabled": true,
+  "embedding_model": "local-hash-embedding-v1",
+  "semantic_chunk_count": 6
+}
+```
+
+## 3. 本地运行顺序
+
+从 repo root 执行。
+
+### 1. 启动 PostgreSQL + pgvector
+
+```bash
+docker compose up -d postgres
+```
+
+### 2. 安装依赖
+
+如果 `.venv` 已存在，先激活：
+
+```bash
+source .venv/bin/activate
+```
+
+如果还没安装 API 包：
+
+```bash
+pip install -e apps/api
+```
+
+### 3. 跑 migration
+
+```bash
+python3 apps/api/scripts/migrate.py
+```
+
+如果你使用 `.venv` 的解释器：
+
+```bash
+.venv/bin/python apps/api/scripts/migrate.py
+```
+
+### 4. 导入 seed data
+
+```bash
+python3 apps/api/scripts/ingest_seed.py
+```
+
+预期输出：
+
+```text
+Seed ingestion completed
+- listings: 63
+- knowledge_sources: 27
+- eval_cases: 20
+```
+
+### 5. 生成 embeddings
+
+```bash
+python3 apps/api/scripts/build_embeddings.py
+```
+
+第一次预期类似：
+
+```text
+Chunk embedding generation completed
+- embedding_model: local-hash-embedding-v1
+- scanned_chunks: 27
+- embedded_chunks: 27
+- skipped_chunks: 0
+```
+
+第二次预期类似：
+
+```text
+Chunk embedding generation completed
+- embedding_model: local-hash-embedding-v1
+- scanned_chunks: 27
+- embedded_chunks: 0
+- skipped_chunks: 27
+```
+
+### 6. 启动 API
+
+```bash
+uvicorn app.main:app --app-dir apps/api --reload
+```
+
+### 7. 调用 `/retrieve`
+
+示例 request：
+
+```json
+{
+  "query": "I want a reliable Toyota hybrid for daily commuting under 16000. Should I consider Aqua or Prius?",
+  "limit": 3
+}
+```
+
+预期结果：
+
+- `applied_filters.max_price = 16000`
+- `applied_filters.models` 包含 `Aqua` 和 `Prius`
+- `listings` 返回候选车辆
+- `chunks` 返回 semantic evidence chunks
+- `debug.embedding_search_enabled = true`
+
+## 4. 当前系统如何工作
+
+### 数据导入链路
+
+```text
+data/seed/listings.jsonl
+data/seed/knowledge_sources.jsonl
+data/seed/eval_cases.json
+        |
+        v
+apps/api/scripts/ingest_seed.py
+        |
+        v
+apps/api/app/ingestion/seed_loader.py
+        |
+        v
+SQLAlchemy ORM
+        |
+        v
+PostgreSQL tables
+```
+
+### embedding 链路
+
+```text
+document_chunks
+        |
+        v
+apps/api/scripts/build_embeddings.py
+        |
+        v
+LocalHashEmbeddingProvider
+        |
+        v
+chunk_embeddings.embedding vector(1536)
+```
+
+### retrieval 链路
+
+```text
+POST /retrieve
+        |
+        v
+RetrieveRequest
+        |
+        v
+infer_filters()
+        |
+        v
+structured listings query
+        |
+        v
+model-linked knowledge query
+        |
+        v
+query embedding
+        |
+        v
+pgvector semantic chunk query
+        |
+        v
+RetrieveResponse
+```
+
+## 5. 当前用了哪些技术
 
 ### Python
 
@@ -340,270 +685,195 @@ RetrieveResponse
 
 你需要掌握：
 
-- 函数、类型标注、dict/list。
-- 文件读取。
-- JSON / JSONL 处理。
-- 虚拟环境 `.venv`。
-- Python package 结构。
+- 函数。
+- 类型标注。
+- `dict` / `list`。
+- `Path`。
+- JSON / JSONL。
+- package import。
+- 虚拟环境。
 
-在本项目出现的位置：
+重点文件：
 
-- `scripts/`
-- `apps/api/app/`
-- `apps/api/scripts/`
+- `scripts/validate_seed_data.py`
+- `apps/api/app/ingestion/seed_loader.py`
+- `apps/api/app/embedding/service.py`
+- `apps/api/app/retrieval/service.py`
 
 ### FastAPI
 
-FastAPI 是 Python Web API 框架。
+Web API 框架。
 
 它负责：
 
-- 定义 HTTP endpoint。
+- 定义 endpoint。
 - 接收 request。
 - 返回 response。
-- 根据 Pydantic schema 做输入输出校验。
+- 用 Pydantic 做输入输出校验。
 
-在本项目出现的位置：
+重点文件：
 
 - `apps/api/app/main.py`
 - `apps/api/app/api/routes.py`
 
-你要重点理解：
+重点概念：
 
 - `APIRouter`
-- `@router.get(...)`
-- `@router.post(...)`
+- `@router.get`
+- `@router.post`
 - `response_model`
-- request body 和 query parameter 的区别。
-
-### Uvicorn
-
-Uvicorn 是运行 FastAPI 的 ASGI server。
-
-简单理解：FastAPI 是应用代码，Uvicorn 是把这个应用跑起来的服务器。
-
-运行命令：
-
-```bash
-uvicorn app.main:app --app-dir apps/api --reload
-```
+- request body
+- query parameter
 
 ### Pydantic
 
-Pydantic 用来定义数据结构和校验数据。
+定义 API 输入输出结构。
 
-在本项目中，Pydantic schema 用来定义：
-
-- API 请求体。
-- API 返回体。
-- listing / knowledge 的字段结构。
-
-出现位置：
+重点文件：
 
 ```text
 apps/api/app/models/schemas.py
 ```
 
-你要理解：
+重点概念：
 
 - `BaseModel`
-- 字段类型，例如 `str | None`
-- 默认值
+- `Field`
 - `ConfigDict(from_attributes=True)`
-
-`from_attributes=True` 的作用是让 Pydantic 可以直接从 SQLAlchemy ORM object 转成 API response。
+- `str | None`
+- `list[...]`
+- response validation
 
 ### PostgreSQL
 
-PostgreSQL 是关系型数据库。
+关系型数据库。
 
-这个项目用它存：
+本项目用它存：
 
-- 车辆 listing。
-- 车型知识。
-- 文档 chunk。
-- 未来的 embedding 向量。
-- eval cases。
-- request logs。
-
-出现位置：
-
-- `docker-compose.yml`
-- `apps/api/migrations/001_init.sql`
-- `apps/api/app/db/`
+- listing。
+- knowledge source。
+- document chunk。
+- embedding vector。
+- eval case。
+- request log。
 
 ### pgvector
 
-pgvector 是 PostgreSQL 的向量扩展。
+PostgreSQL 向量扩展。
 
-未来它用于存储 embedding，并支持向量相似度搜索。
-
-当前 schema 已经有：
+本项目使用：
 
 ```sql
 embedding vector(1536)
 ```
 
-但目前还没有真正生成 embedding，也没有真正做向量搜索。
+semantic retrieval 使用 cosine distance operator：
 
-你现在只需要理解：
+```sql
+<=>
+```
 
-- embedding 是一组数字。
-- 相似文本的 embedding 在向量空间里距离更近。
-- pgvector 让 PostgreSQL 可以存这些向量并做相似度搜索。
+在 SQLAlchemy 中通过：
+
+```python
+ChunkEmbeddingRecord.embedding.op("<=>")(...)
+```
 
 ### SQLAlchemy ORM
 
-SQLAlchemy 是 Python 里常用的数据库工具。
+数据库访问层。
 
-ORM 的意思是 Object Relational Mapping。
+本项目运行时数据库访问必须用 ORM，不要直接在业务代码里写 raw SQL。
 
-简单理解：
+重点概念：
 
-数据库表：
-
-```text
-listings
-```
-
-Python class：
-
-```python
-class ListingRecord(Base):
-    __tablename__ = "listings"
-```
-
-数据库中的一行：
-
-```text
-listing_id = "seed-civic-001"
-brand = "Honda"
-model = "Civic"
-```
-
-Python object：
-
-```python
-ListingRecord(
-    listing_id="seed-civic-001",
-    brand="Honda",
-    model="Civic",
-)
-```
-
-在本项目出现的位置：
-
-- `apps/api/app/db/connection.py`
-- `apps/api/app/db/orm.py`
-- `apps/api/app/ingestion/seed_loader.py`
-- `apps/api/app/retrieval/service.py`
-- `apps/api/app/api/routes.py`
-
-你要理解：
-
-- `engine`
-- `Session`
-- `select()`
-- `session.scalars(...)`
-- `session.merge(...)`
-- `session.add(...)`
-- `relationship`
+- `DeclarativeBase`
+- `Mapped`
 - `mapped_column`
-- `Mapped[...]`
+- `relationship`
+- `select`
+- `join`
+- `outerjoin`
+- `session.execute`
+- `session.scalars`
+- `session.merge`
+- `session.add`
 
 ### psycopg
 
-psycopg 是 Python 连接 PostgreSQL 的 driver。
+PostgreSQL driver。
 
-SQLAlchemy 负责 ORM，psycopg 负责底层实际连接数据库。
-
-当前数据库 URL 是：
+数据库 URL：
 
 ```text
-postgresql+psycopg://...
+postgresql+psycopg://used_car:used_car@127.0.0.1:5432/used_car_copilot
 ```
 
-这表示 SQLAlchemy 使用 psycopg driver 连接 PostgreSQL。
+SQLAlchemy 负责 ORM 抽象，psycopg 负责底层连接。
 
 ### Docker Compose
 
-Docker Compose 用来启动本地数据库。
+用于启动本地数据库。
 
-当前项目没有要求你手动安装 PostgreSQL。你只需要用：
+命令：
 
 ```bash
 docker compose up -d postgres
+docker compose ps
+docker compose logs --tail 80 postgres
 ```
 
-它会根据 `docker-compose.yml` 启动一个带 pgvector 的 PostgreSQL container。
+### JSON / JSONL
 
-### JSON 和 JSONL
+`JSON`：一个完整 JSON 文档。
 
-`JSON` 是常见数据格式。
+`JSONL`：每一行是一个 JSON object。
 
-例如：
-
-```json
-{
-  "brand": "Honda",
-  "model": "Civic"
-}
-```
-
-`JSONL` 是每一行都是一个 JSON object 的格式。
-
-例如：
-
-```jsonl
-{"brand":"Honda","model":"Civic"}
-{"brand":"Toyota","model":"Prius"}
-```
-
-本项目用 JSONL 存 listing 和 knowledge source，是因为这种格式适合一行一条记录，方便追加、检查和导入。
+本项目用 JSONL 存 listing 和 knowledge source，因为它适合一条记录一行，方便导入和校验。
 
 ### RAG
 
 RAG 是 Retrieval-Augmented Generation。
 
-中文可以理解为：先检索资料，再让大模型基于资料回答。
-
-完整 RAG 流程通常是：
+完整流程：
 
 ```text
-用户问题
+user query
    |
    v
-检索相关资料
+retrieve evidence
    |
    v
-把资料放进 prompt
+build prompt with evidence
    |
    v
-LLM 生成答案
+LLM generation
    |
    v
-附上引用和证据
+answer with citations
 ```
 
-当前项目已经开始做 retrieval 的基础，但还没有做 LLM generation。
+当前项目已经完成 retrieval 的基础部分，但还没有做 LLM generation。
 
 ### Hybrid Retrieval
 
 Hybrid retrieval 是混合检索。
 
-未来这个项目计划结合：
+本项目当前已经有：
 
-- 结构化过滤：价格、年份、品牌、里程、地点、body type。
-- 关键词搜索：文本里直接匹配词。
-- 向量搜索：embedding semantic search。
+- 结构化过滤：location、max_price、brand、models、body_type。
+- model-linked knowledge retrieval。
+- pgvector semantic chunk retrieval。
 
-当前已经有结构化过滤和车型知识关联，还没有关键词全文检索和向量检索。
+未来可以继续加：
+
+- full-text keyword search。
+- reranking。
+- listing + evidence scoring。
 
 ### Evaluation
 
-Evaluation 是评估。
-
-这个项目不是只做一个能跑的 demo，而是要证明结果质量。
+Evaluation 是项目质量证明。
 
 当前 eval data 在：
 
@@ -611,1064 +881,341 @@ Evaluation 是评估。
 data/seed/eval_cases.json
 ```
 
-未来可以检查：
+下一步 eval runner 应该检查：
 
-- 检索结果是否包含正确车型。
-- 风险主题是否覆盖。
-- citation 是否支持生成内容。
-- 推荐是否稳定。
+- query 推断出的 filters 是否合理。
+- listing candidate models 是否覆盖 expected models。
+- semantic chunks 是否覆盖 expected risk themes。
+- debug metadata 是否足够定位问题。
 
-## 5. 数据库表怎么理解
+## 6. 当前 API 合约
 
-### `listings`
+### `GET /health`
 
-车辆 listing。
+检查数据库连接是否正常。
 
-核心字段：
+返回：
 
-- `listing_id`
-- `title`
-- `brand`
-- `model`
-- `year`
-- `price`
-- `mileage`
-- `location`
-- `body_type`
-- `description`
-- `raw_payload`
+```json
+{
+  "status": "ok"
+}
+```
 
-学习重点：这是系统推荐车辆的候选池。
+### `GET /listings`
 
-### `knowledge_sources`
+返回 listing 列表。
 
-车型知识来源。
+参数：
+
+```text
+limit: int = 20
+```
+
+### `GET /knowledge`
+
+返回 knowledge source 列表。
+
+参数：
+
+```text
+limit: int = 20
+```
+
+### `POST /retrieve`
+
+请求 schema：
+
+```json
+{
+  "query": "string",
+  "max_price": 16000,
+  "brand": "Toyota",
+  "models": ["Aqua", "Prius"],
+  "body_type": "hatchback",
+  "location": "Auckland",
+  "limit": 5
+}
+```
+
+所有字段不一定都要传。
+
+当前 `infer_filters()` 会从 query 里保守推断：
+
+- 车型，例如 Aqua、Prius、Civic。
+- body type，例如 suv、hatchback、sedan。
+- `under 16000` 形式的预算。
+
+返回 schema：
+
+```json
+{
+  "query": "...",
+  "applied_filters": {},
+  "listings": [],
+  "knowledge": [],
+  "chunks": [],
+  "debug": {}
+}
+```
+
+`chunks` 中每条记录包含：
+
+```json
+{
+  "chunk_id": "...",
+  "source_id": "...",
+  "source_title": "...",
+  "source_type": "maintenance",
+  "brand": "Toyota",
+  "model": "Aqua",
+  "evidence_level": "medium",
+  "text": "...",
+  "similarity": 0.1234
+}
+```
+
+## 7. 已验证过的命令
+
+这些命令已经在当前项目状态下跑通过。
+
+```bash
+python3 scripts/validate_seed_data.py
+```
+
+```bash
+.venv/bin/python -m compileall apps/api/app apps/api/scripts
+```
+
+```bash
+docker compose up -d postgres
+```
+
+```bash
+.venv/bin/python apps/api/scripts/migrate.py
+```
+
+```bash
+.venv/bin/python apps/api/scripts/ingest_seed.py
+```
+
+```bash
+.venv/bin/python apps/api/scripts/build_embeddings.py
+```
+
+服务层 retrieval smoke test 已验证：
+
+- 可以解析 `under 16000`。
+- 可以返回 Toyota Aqua / Prius listing。
+- 可以返回 Aqua / Prius semantic chunks。
+- `debug.embedding_search_enabled = true`。
+
+注意：FastAPI `TestClient` 当前没有跑，因为环境里缺 `httpx`。这不是业务代码问题。如果要做正式 API test，可以把 `httpx` 加到 dev/test dependencies。
+
+## 8. 建议学习顺序
+
+### 第一阶段：理解数据
+
+读：
+
+1. `data/seed/listings.jsonl`
+2. `data/seed/knowledge_sources.jsonl`
+3. `data/seed/eval_cases.json`
+4. `scripts/validate_seed_data.py`
+
+目标：
+
+- 知道 listing 有哪些字段。
+- 知道 knowledge source 有哪些字段。
+- 知道 eval case 希望检查什么。
+
+### 第二阶段：理解数据库
+
+读：
+
+1. `apps/api/migrations/001_init.sql`
+2. `apps/api/migrations/002_chunk_embedding_content_hash.sql`
+3. `apps/api/app/db/orm.py`
+
+目标：
+
+- 知道每张表存什么。
+- 知道 ORM class 如何对应 table。
+- 知道 `chunk_embeddings` 如何存 vector。
+
+### 第三阶段：理解 ingestion
+
+读：
+
+1. `apps/api/scripts/ingest_seed.py`
+2. `apps/api/app/ingestion/seed_loader.py`
+
+目标：
+
+- 知道 seed data 如何写入数据库。
+- 知道 knowledge source 如何变成 document chunks。
+- 知道 ingestion run 如何记录。
+
+### 第四阶段：理解 embedding
+
+读：
+
+1. `apps/api/scripts/build_embeddings.py`
+2. `apps/api/app/embedding/service.py`
+3. `apps/api/app/embedding/builder.py`
+
+目标：
+
+- 知道本地 embedding provider 只是开发 scaffold。
+- 知道 content hash skip 是怎么工作的。
+- 知道未来替换 OpenAI embeddings 时应该替换哪一层。
+
+### 第五阶段：理解 retrieval
+
+读：
+
+1. `apps/api/app/models/schemas.py`
+2. `apps/api/app/retrieval/service.py`
+3. `apps/api/app/api/routes.py`
+
+目标：
+
+- 知道 request schema。
+- 知道 filters 如何推断。
+- 知道 listing query 如何构造。
+- 知道 semantic chunk query 如何构造。
+- 知道 response 里每个字段给谁用。
+
+### 第六阶段：做 eval runner
+
+下一步最适合做这个。
+
+建议新增：
+
+```text
+apps/api/app/evaluation/
+apps/api/scripts/run_retrieval_eval.py
+```
+
+eval runner 第一版不需要复杂。
+
+它可以：
+
+1. 读取数据库里的 `eval_cases`。
+2. 对每条 case 调用 `retrieve(...)`。
+3. 检查 candidate models 覆盖率。
+4. 检查 chunks 文本是否包含 expected risk themes 的关键词。
+5. 输出 pass/fail summary。
+
+第一版目标不是完美评估，而是建立回归测试入口。
+
+## 9. 当前技术债和注意点
+
+### local hash embedding 不是最终方案
+
+`local-hash-embedding-v1` 是为了让 pgvector pipeline 先跑通。
+
+不能把它当成真正语义 embedding。
+
+后续应该做 provider abstraction，例如：
+
+```text
+EmbeddingProvider
+├── LocalHashEmbeddingProvider
+└── OpenAIEmbeddingProvider
+```
+
+### query parser 很保守
+
+当前 `infer_filters()` 只能处理少量情况。
 
 例如：
 
-- 某车型常见问题。
-- 维修风险。
-- 购买建议。
-- 油耗和使用场景。
+- `under 16000`
+- 车型别名
+- `suv` / `hatchback` / `sedan`
 
-核心字段：
+后续可以改进，但不要太早做复杂 NLP。先让 eval runner 暴露真实缺口。
 
-- `source_id`
-- `source_type`
-- `source_channel`
-- `title`
-- `brand`
-- `model`
-- `tags`
-- `summary`
-- `text`
-- `evidence_level`
+### `/retrieve` 不是最终推荐 API
 
-学习重点：这是 RAG 里的知识库原文来源。
+`/retrieve` 只返回候选 listing 和 evidence。
 
-### `document_chunks`
+未来 `/recommend` 才应该负责：
 
-知识来源切分后的文本块。
+- ranking。
+- risk scoring。
+- LLM generation。
+- citations。
+- stable JSON output。
 
-RAG 系统通常不会把一整篇长文直接塞给模型，而是先切成 chunk。
+### request logs 还很基础
 
-当前 chunk 是 ingestion 时从 `knowledge_sources.text` 切出来的。
-
-学习重点：chunk 是未来 embedding 和向量检索的基本单位。
-
-### `chunk_embeddings`
-
-未来存 embedding。
-
-当前表已经建好，但还没有数据。
-
-核心字段：
-
-- `chunk_id`
-- `embedding_model`
-- `embedding vector(1536)`
-
-学习重点：这是 pgvector 将来真正发挥作用的地方。
-
-### `eval_cases`
-
-评估用例。
-
-每条 eval case 通常包括：
-
-- 用户 query。
-- 期望 filters。
-- 期望候选车型。
-- 期望风险主题。
-
-学习重点：这是让项目从“能跑”变成“可验证”的关键。
-
-### `request_logs`
-
-请求日志。
-
-每次调用 `/retrieve` 会记录：
+当前 `request_logs` 记录：
 
 - endpoint
 - query
 - filters
 - listing_count
 - knowledge_count
-- latency_ms
-- error
 
-学习重点：这是 observability 的起点。以后调试检索质量会很依赖日志。
+后续可以增加：
 
-### `ingestion_runs`
+- retrieved chunk ids。
+- latency by stage。
+- model name。
+- token usage。
+- error details。
 
-导入记录。
+## 10. 你现在应该能解释的内容
 
-每次 seed data ingestion 都会记录：
-
-- 开始时间。
-- 完成时间。
-- 状态。
-- 导入了多少 listings / knowledge / eval cases。
-- 错误信息。
-
-学习重点：数据导入不能只看“脚本有没有报错”，还应该有可追踪的运行记录。
-
-## 6. 目前可以运行的命令
-
-先安装依赖：
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e apps/api
-```
-
-校验 seed data：
-
-```bash
-python3 scripts/validate_seed_data.py
-```
-
-启动数据库：
-
-```bash
-docker compose up -d postgres
-```
-
-执行 migration：
-
-```bash
-python3 apps/api/scripts/migrate.py
-```
-
-导入 seed data：
-
-```bash
-python3 apps/api/scripts/ingest_seed.py
-```
-
-启动 API：
-
-```bash
-uvicorn app.main:app --app-dir apps/api --reload
-```
-
-测试 health：
-
-```bash
-curl http://127.0.0.1:8000/health
-```
-
-查看 listings：
-
-```bash
-curl "http://127.0.0.1:8000/listings?limit=2"
-```
-
-测试 retrieve：
-
-```bash
-curl -X POST http://127.0.0.1:8000/retrieve \
-  -H "Content-Type: application/json" \
-  -d '{"query":"I want a Honda Civic under $15000 for commuting","limit":3}'
-```
-
-停止数据库：
-
-```bash
-docker compose down
-```
-
-## 7. 应该按什么顺序学习
-
-### 第 1 阶段：先理解产品目标
-
-阅读：
-
-1. `README.md`
-2. `documents/product-brief.md`
-3. `documents/mvp-spec.md`
-4. `documents/technical-architecture.md`
-
-你要能回答：
-
-- 这个项目为什么不是普通 chatbot？
-- 用户输入什么？
-- 系统应该输出什么？
-- 为什么需要 citation？
-- 为什么需要 evaluation？
-
-### 第 2 阶段：理解数据
-
-阅读：
-
-1. `data/README.md`
-2. `data/seed/listings.jsonl`
-3. `data/seed/knowledge_sources.jsonl`
-4. `data/seed/eval_cases.json`
-5. `scripts/validate_seed_data.py`
-
-你要能回答：
-
-- listing 是什么？
-- knowledge source 是什么？
-- eval case 是什么？
-- 为什么 listing 和 knowledge 要分开？
-- JSON 和 JSONL 有什么区别？
-
-练习：
-
-1. 手动读 3 条 listing。
-2. 找出它们的 brand、model、price、mileage。
-3. 在 `knowledge_sources.jsonl` 里找同 brand/model 的知识。
-4. 运行 `python3 scripts/validate_seed_data.py`。
-
-### 第 3 阶段：理解数据库
-
-阅读：
-
-1. `docker-compose.yml`
-2. `apps/api/migrations/001_init.sql`
-3. `apps/api/app/db/orm.py`
-
-你要能回答：
-
-- 为什么要用 PostgreSQL？
-- `listings` 表和 `knowledge_sources` 表分别存什么？
-- `document_chunks` 为什么存在？
-- `chunk_embeddings` 现在为什么是空的？
-- SQL table 和 ORM class 怎么对应？
-
-练习：
-
-1. 找到 `ListingRecord`。
-2. 对照 `CREATE TABLE listings`。
-3. 看每个字段类型是怎么对应的。
-4. 找到 `KnowledgeSourceRecord` 和 `knowledge_sources` 的对应关系。
-
-### 第 4 阶段：理解 ORM
-
-阅读：
-
-1. `apps/api/app/db/connection.py`
-2. `apps/api/app/db/orm.py`
-3. `apps/api/app/ingestion/seed_loader.py`
-4. `apps/api/app/retrieval/service.py`
-
-你要能回答：
-
-- `engine` 是什么？
-- `session` 是什么？
-- `session.merge()` 和 `session.add()` 大概有什么区别？
-- `select(ListingRecord)` 是什么意思？
-- 为什么运行时不直接到处写 SQL？
-
-练习：
-
-1. 在 `seed_loader.py` 里找到写入 listing 的代码。
-2. 在 `retrieval/service.py` 里找到查询 listing 的代码。
-3. 对照 ORM class 看查询字段。
-
-### 第 5 阶段：理解 API
-
-阅读：
-
-1. `apps/api/app/main.py`
-2. `apps/api/app/api/routes.py`
-3. `apps/api/app/models/schemas.py`
-
-你要能回答：
-
-- `GET /health` 做什么？
-- `GET /listings` 返回什么？
-- `POST /retrieve` 的 request body 长什么样？
-- `response_model` 有什么作用？
-- Pydantic schema 和 ORM model 有什么区别？
-
-练习：
-
-1. 启动 API。
-2. 用 curl 调 `/health`。
-3. 用 curl 调 `/listings?limit=2`。
-4. 用 curl 调 `/retrieve`。
-5. 看返回 JSON 里有哪些字段。
-
-### 第 6 阶段：理解 retrieval
-
-阅读：
+如果你要把这个项目讲给面试官，当前可以这样说：
 
 ```text
-apps/api/app/retrieval/service.py
+I am building a used-car decision support system rather than a generic chatbot.
+The current backend uses FastAPI, PostgreSQL, SQLAlchemy, and pgvector.
+Seed listings and model knowledge are normalized into canonical JSONL files,
+loaded into Postgres, chunked, embedded with a deterministic local embedding
+provider, and retrieved through a hybrid `/retrieve` endpoint.
+
+The current retrieval combines structured filters such as budget, location,
+body type, and model with semantic chunk retrieval over pgvector. The local
+embedding provider is a development scaffold so the vector pipeline can be
+tested without external API keys. The next step is a retrieval eval runner
+using fixed eval cases before adding citation-grounded recommendation
+generation.
 ```
 
-你要能回答：
-
-- `infer_filters()` 做什么？
-- `MODEL_ALIASES` 做什么？
-- 当前是如何从 query 中识别 Honda Civic 的？
-- 当前排序为什么优先 price、mileage、year？
-- 为什么返回里有 `debug`？
-- 为什么 `embedding_search_enabled` 是 `False`？
-
-练习：
-
-1. 搜索 Civic。
-2. 搜索 SUV。
-3. 搜索 under $15000。
-4. 改变 limit，看返回数量变化。
-5. 观察 `applied_filters`。
-
-### 第 7 阶段：再学 RAG、embedding、pgvector
-
-这一阶段是下一步开发会用到的。
-
-你要先理解：
-
-- chunk 是什么。
-- embedding 是什么。
-- vector search 是什么。
-- pgvector 的 `vector(1536)` 是什么。
-- cosine similarity 是什么。
-- citation 为什么要绑定到 source/chunk。
-
-当前代码里可以先看：
-
-- `document_chunks` 表。
-- `chunk_embeddings` 表。
-- `DocumentChunkRecord`。
-- `ChunkEmbeddingRecord`。
-
-但要记住：这些现在是为下一步准备的，不代表已经完成 semantic search。
-
-## 8. 技术名词怎么查
-
-查技术名词时，建议用这个顺序：
-
-1. 先在项目里搜，看它在哪里出现。
-2. 再查官方文档。
-3. 再看中文解释。
-4. 最后看博客或视频。
-
-### 在项目里查
-
-查某个词在哪些文件出现：
-
-```bash
-rg "SQLAlchemy"
-```
-
-查某个 class：
-
-```bash
-rg "ListingRecord"
-```
-
-查 endpoint：
-
-```bash
-rg "/retrieve"
-```
-
-查所有文件：
-
-```bash
-rg --files
-```
-
-查数据库表：
-
-```bash
-rg "CREATE TABLE"
-```
-
-### 去网上查
-
-推荐搜索格式：
+中文版本：
 
 ```text
-FastAPI official docs APIRouter
-SQLAlchemy 2.0 ORM select official docs
-Pydantic v2 BaseModel official docs
-PostgreSQL JSONB official docs
-pgvector official docs
-Docker Compose official docs
-RAG retrieval augmented generation explanation
-embedding vector search cosine similarity explanation
+这个项目不是普通聊天机器人，而是一个二手车决策支持系统。
+当前后端使用 FastAPI、PostgreSQL、SQLAlchemy 和 pgvector。
+项目把 listing 和车型知识整理成 seed data，导入数据库后生成 document chunks，
+再用本地 deterministic embedding 写入 pgvector。`/retrieve` 接口现在同时支持
+结构化筛选和 semantic chunk retrieval。
+
+当前 embedding provider 只是开发阶段 scaffold，用来在没有外部 API key 的情况下
+跑通向量检索链路。下一步会用 eval cases 做 retrieval eval runner，然后再实现
+带 citation 的 recommendation JSON。
 ```
 
-如果你想要中文解释，可以加：
+## 11. 下一步任务建议
+
+优先级从高到低：
+
+1. 新增 retrieval eval runner。
+2. 把 eval summary 输出到 markdown 或 JSON。
+3. 给 `/retrieve` 增加更明确的 retrieved chunk ids debug。
+4. 设计 `/recommend` response schema。
+5. 实现 deterministic recommendation baseline，不先接 LLM。
+6. 再抽象外部 embedding / LLM provider。
+7. 最后开始前端 decision workbench。
+
+当前最推荐下一步：
 
 ```text
-中文解释
+Build a small retrieval eval runner before adding LLM generation.
 ```
 
-例如：
-
-```text
-SQLAlchemy ORM 中文解释
-pgvector 中文解释
-RAG 中文解释
-```
-
-### 怎么判断资料是否靠谱
-
-优先级：
-
-1. 官方文档。
-2. 项目源码。
-3. 官方 GitHub README。
-4. 高质量教程。
-5. 随机博客。
-
-如果官方文档和博客说法冲突，优先相信官方文档和项目源码。
-
-## 9. 常见术语表
-
-### API
-
-Application Programming Interface。
-
-在这个项目里，API 指后端暴露给前端或用户调用的 HTTP 接口，比如 `/retrieve`。
-
-### Endpoint
-
-一个具体的 API 地址。
-
-例如：
-
-```text
-GET /listings
-POST /retrieve
-```
-
-### Request
-
-客户端发给服务端的数据。
-
-例如用户调用 `/retrieve` 时发：
-
-```json
-{
-  "query": "I want a Honda Civic under $15000",
-  "limit": 3
-}
-```
-
-### Response
-
-服务端返回给客户端的数据。
-
-例如返回 listings、knowledge 和 debug。
-
-### Schema
-
-数据结构定义。
-
-这个项目里有两种 schema：
-
-- 数据库 schema：`001_init.sql`。
-- API schema：`schemas.py`。
-
-### Migration
-
-数据库结构变更脚本。
-
-当前是：
-
-```text
-apps/api/migrations/001_init.sql
-```
-
-### ORM
-
-Object Relational Mapping。
-
-用 Python class 操作数据库表，而不是在业务代码里到处手写 SQL。
-
-### Model
-
-这个词容易混淆。
-
-在这个项目中可能有三种意思：
-
-1. 车辆 model：例如 Honda Civic。
-2. ORM model：例如 `ListingRecord`。
-3. AI model：例如未来的 embedding model 或 LLM。
-
-看到 model 时，要根据上下文判断。
-
-### Engine
-
-SQLAlchemy 里的数据库连接入口。
-
-当前在：
-
-```text
-apps/api/app/db/connection.py
-```
-
-### Session
-
-SQLAlchemy 里的一次数据库操作上下文。
-
-你可以理解为：用 session 查询、写入、提交或回滚数据库。
-
-### Driver
-
-Python 连接数据库的底层库。
-
-当前 driver 是 psycopg。
-
-### Seed Data
-
-开发初期手动准备或半自动准备的小规模数据，用来让系统能跑起来。
-
-当前在：
-
-```text
-data/seed/
-```
-
-### Ingestion
-
-数据导入。
-
-在这个项目里，ingestion 指把 `data/seed/` 的文件写入 PostgreSQL。
-
-### Listing
-
-一条二手车广告 / 车源。
-
-包含价格、里程、年份、地点、描述等。
-
-### Knowledge Source
-
-一条车型知识来源。
-
-比如某个车型的常见问题、维修风险、购买建议。
-
-### Chunk
-
-长文本切分后的小文本块。
-
-RAG 系统一般按 chunk 检索，而不是直接检索整篇长文。
-
-### Embedding
-
-把文本转换成一组数字向量。
-
-语义相近的文本，embedding 通常也更接近。
-
-### Vector Search
-
-向量搜索。
-
-用 embedding 找语义相似内容。
-
-### pgvector
-
-PostgreSQL 的向量扩展，用来存 embedding 并做向量相似度搜索。
-
-### RAG
-
-Retrieval-Augmented Generation。
-
-先检索资料，再让 LLM 基于资料生成答案。
-
-### Citation
-
-引用来源。
-
-在这个项目里，citation 很重要，因为推荐和风险提示必须能回到 listing 或 knowledge source。
-
-### Reranking
-
-重新排序。
-
-通常先粗略召回一批候选结果，再用更精细的模型或规则重新排序。
-
-### Observability
-
-可观测性。
-
-简单说，就是系统出问题时，你能通过日志、指标、trace 知道发生了什么。
-
-当前的 `request_logs` 是 observability 的早期基础。
-
-### Smoke Test
-
-冒烟测试。
-
-不是完整测试，只是快速确认核心链路是否能跑。
-
-例如：
-
-- `/health` 返回 ok。
-- `/listings` 有数据。
-- `/retrieve` 能返回候选车辆。
-
-## 10. 如何从文件找到概念
-
-如果你看到一个技术名词，不知道它在项目哪里，按下面找。
-
-### FastAPI
-
-看：
-
-```text
-apps/api/app/main.py
-apps/api/app/api/routes.py
-```
-
-搜索：
-
-```bash
-rg "FastAPI|APIRouter|router"
-```
-
-### Pydantic
-
-看：
-
-```text
-apps/api/app/models/schemas.py
-```
-
-搜索：
-
-```bash
-rg "BaseModel|ConfigDict"
-```
-
-### SQLAlchemy ORM
-
-看：
-
-```text
-apps/api/app/db/connection.py
-apps/api/app/db/orm.py
-apps/api/app/retrieval/service.py
-apps/api/app/ingestion/seed_loader.py
-```
-
-搜索：
-
-```bash
-rg "select\\(|session\\.|mapped_column|Mapped"
-```
-
-### PostgreSQL schema
-
-看：
-
-```text
-apps/api/migrations/001_init.sql
-```
-
-搜索：
-
-```bash
-rg "CREATE TABLE|CREATE INDEX"
-```
-
-### 数据导入
-
-看：
-
-```text
-apps/api/scripts/ingest_seed.py
-apps/api/app/ingestion/seed_loader.py
-```
-
-搜索：
-
-```bash
-rg "ingest|seed|merge"
-```
-
-### 检索逻辑
-
-看：
-
-```text
-apps/api/app/retrieval/service.py
-```
-
-搜索：
-
-```bash
-rg "retrieve|infer_filters|MODEL_ALIASES"
-```
-
-### 数据校验
-
-看：
-
-```text
-scripts/validate_seed_data.py
-```
-
-搜索：
-
-```bash
-rg "validate|expected|required"
-```
-
-## 11. 推荐动手练习
-
-### 练习 1：读懂一条 listing
-
-打开：
-
-```text
-data/seed/listings.jsonl
-```
-
-找一条 Honda Civic。
-
-回答：
-
-- 它的 `listing_id` 是什么？
-- `price` 是多少？
-- `mileage` 是多少？
-- `body_type` 是什么？
-- `source` 是什么？
-
-### 练习 2：找到同车型知识
-
-打开：
-
-```text
-data/seed/knowledge_sources.jsonl
-```
-
-找 Honda Civic 相关知识。
-
-回答：
-
-- 它的 `source_type` 是什么？
-- 它有什么 `tags`？
-- 它的 `summary` 讲了什么？
-- 它和 listing 如何关联？
-
-### 练习 3：运行校验
-
-运行：
-
-```bash
-python3 scripts/validate_seed_data.py
-```
-
-回答：
-
-- 它校验了哪些文件？
-- 如果字段缺失，它会在哪里报错？
-
-### 练习 4：理解 ORM class
-
-打开：
-
-```text
-apps/api/app/db/orm.py
-```
-
-找到：
-
-```python
-class ListingRecord(Base):
-```
-
-对照：
-
-```text
-apps/api/migrations/001_init.sql
-```
-
-回答：
-
-- `listing_id` 在 SQL 里是什么类型？
-- `listing_id` 在 ORM 里是什么类型？
-- `raw_payload` 为什么是 JSONB？
-
-### 练习 5：调用 API
-
-启动数据库和 API 后，调用：
-
-```bash
-curl -X POST http://127.0.0.1:8000/retrieve \
-  -H "Content-Type: application/json" \
-  -d '{"query":"I want a Honda Civic under $15000 for commuting","limit":3}'
-```
-
-回答：
-
-- `applied_filters` 里识别出了什么？
-- 返回了几个 listings？
-- 返回了哪些 knowledge？
-- `debug.retrieval_mode` 是什么？
-
-### 练习 6：做一个小改动
-
-尝试在 `data/seed/listings.jsonl` 里加一条新 listing。
-
-然后运行：
-
-```bash
-python3 scripts/validate_seed_data.py
-python3 apps/api/scripts/ingest_seed.py
-```
-
-再调用 `/listings` 或 `/retrieve` 看它是否出现。
-
-注意：真实开发时，改数据前应该先看当前格式，不要随便改字段名。
-
-## 12. 当前还没有完成什么
-
-这些是接下来会继续学习和实现的内容。
-
-### 还没有真正的 semantic search
-
-虽然数据库有 `chunk_embeddings` 表，也启用了 pgvector，但当前还没有：
-
-- 调 embedding API。
-- 写入 embedding。
-- 按向量相似度搜索。
-
-### 还没有 LLM 生成答案
-
-当前 `/retrieve` 只返回候选 listing 和 knowledge。
-
-还没有：
-
-- prompt 模板。
-- LLM 调用。
-- final recommendation 生成。
-- citation-grounded answer。
-
-### 还没有前端
-
-`apps/web/` 还没有 Next.js 应用。
-
-### 还没有完整自动化测试
-
-当前有数据校验和手动 smoke test，但还没有正式 pytest 测试套件。
-
-### 还没有部署
-
-当前是本地开发状态。
-
-未来可能部署：
-
-- frontend 到 Vercel。
-- API 到 Render / Railway / Fly.io / Azure App Service。
-- Postgres 到 Supabase 或其他托管数据库。
-
-## 13. 你现在最应该掌握的最小知识集
-
-如果你想尽快掌握当前项目，不需要一开始就把所有技术学很深。先掌握下面这些。
-
-### 必须马上懂
-
-- JSON / JSONL。
-- Python 基础。
-- FastAPI endpoint。
-- Pydantic schema。
-- PostgreSQL table。
-- SQLAlchemy ORM class。
-- seed data ingestion。
-- `/retrieve` 当前检索流程。
-
-### 可以稍后深入
-
-- pgvector index。
-- embedding 模型。
-- reranking。
-- LLM prompt engineering。
-- evaluation metrics。
-- frontend UI。
-- deployment。
-
-### 当前最重要的代码阅读顺序
-
-建议按这个顺序读：
-
-1. `README.md`
-2. `data/README.md`
-3. `data/seed/listings.jsonl`
-4. `data/seed/knowledge_sources.jsonl`
-5. `scripts/validate_seed_data.py`
-6. `apps/api/migrations/001_init.sql`
-7. `apps/api/app/db/orm.py`
-8. `apps/api/app/db/connection.py`
-9. `apps/api/app/ingestion/seed_loader.py`
-10. `apps/api/app/models/schemas.py`
-11. `apps/api/app/api/routes.py`
-12. `apps/api/app/retrieval/service.py`
-
-读完之后，你应该能说清楚：
-
-- 数据从哪里来。
-- 数据怎么进数据库。
-- API 怎么查数据库。
-- `/retrieve` 怎么返回候选结果。
-- 下一步为什么要加 embedding 和 LLM。
-
-## 14. 一张当前项目概念图
-
-```text
-              documents/
-                  |
-                  v
-            产品目标和技术计划
-
-data/raw/  --->  scripts/prepare_seed_data.py
-                  |
-                  v
-              data/seed/
-                  |
-                  v
-        scripts/validate_seed_data.py
-                  |
-                  v
-        apps/api/scripts/ingest_seed.py
-                  |
-                  v
-          SQLAlchemy ORM models
-                  |
-                  v
-        PostgreSQL + pgvector database
-                  |
-                  v
-             FastAPI endpoints
-                  |
-                  v
-      /health  /listings  /knowledge  /retrieve
-                  |
-                  v
-       retrieval/service.py 当前检索逻辑
-```
-
-## 15. 学习时不要混淆的几组概念
-
-### ORM model 和 Pydantic schema
-
-ORM model：
-
-- 面向数据库。
-- 对应 table。
-- 例子：`ListingRecord`。
-
-Pydantic schema：
-
-- 面向 API 输入输出。
-- 对应 request / response。
-- 例子：`Listing`、`RetrieveRequest`、`RetrieveResponse`。
-
-### Migration 和 ORM
-
-Migration：
-
-- 创建或修改数据库结构。
-- 当前是 SQL 文件。
-
-ORM：
-
-- 运行时读写数据库。
-- 当前是 Python class。
-
-### Listing 和 Knowledge
-
-Listing：
-
-- 具体某一辆车。
-- 有价格、年份、里程。
-
-Knowledge：
-
-- 关于某车型或购买风险的知识。
-- 用于解释为什么推荐或提醒风险。
-
-### Retrieval 和 Generation
-
-Retrieval：
-
-- 找资料。
-- 当前已经有基础版本。
-
-Generation：
-
-- 用 LLM 组织最终回答。
-- 当前还没有实现。
-
-### pgvector 已配置 和 semantic search 已完成
-
-pgvector 已配置：
-
-- 数据库支持向量字段。
-- schema 有 `chunk_embeddings`。
-
-semantic search 已完成：
-
-- 需要真的生成 embedding。
-- 需要写入 embedding。
-- 需要查询向量相似度。
-
-当前项目只完成了前者，还没有完成后者。
-
-## 16. 接下来学习和开发的合理方向
-
-建议下一步按这个顺序推进：
-
-1. 给当前 API 加 pytest 测试。
-2. 给 retrieval 写评估脚本，读取 `eval_cases.json`。
-3. 生成 knowledge chunk embeddings。
-4. 把 `/retrieve` 从结构化过滤升级为 hybrid retrieval。
-5. 加 LLM 生成推荐答案。
-6. 加 citation 检查。
-7. 再开始前端。
-
-为什么先做测试和评估？
-
-因为这个项目的重点是 portfolio-grade AI engineering。它不只是做一个页面，而是要展示：
-
-- 数据质量。
-- 检索质量。
-- 可解释推荐。
-- 引用证据。
-- 评估和观测。
-- 可部署 API/UI。
-
-## 17. 每次学习一个新技术时的提问模板
-
-当你遇到一个新词，比如 SQLAlchemy、pgvector、Pydantic，可以按这个模板问自己：
-
-1. 它解决什么问题？
-2. 如果没有它，项目会怎么做？
-3. 它在本项目哪个文件出现？
-4. 它的输入是什么？
-5. 它的输出是什么？
-6. 它和上下游文件怎么连接？
-7. 当前项目只是配置了它，还是已经真正使用了它？
-
-用这个模板，你会更容易判断一个技术在项目里的真实作用，而不是只背定义。
-
+原因很直接：如果 retrieval 质量没有固定评估，后面 LLM 生成出来的推荐会很难判断是检索问题、prompt 问题，还是模型问题。

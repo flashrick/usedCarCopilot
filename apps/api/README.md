@@ -39,6 +39,12 @@ Load seed data:
 python3 apps/api/scripts/ingest_seed.py
 ```
 
+Generate local development embeddings for knowledge chunks:
+
+```bash
+python3 apps/api/scripts/build_embeddings.py
+```
+
 Run the API:
 
 ```bash
@@ -52,4 +58,4 @@ uvicorn app.main:app --app-dir apps/api --reload
 - `GET /knowledge`
 - `POST /retrieve`
 
-The first retrieval implementation is intentionally non-LLM and non-embedding. It uses structured filters and model-linked knowledge so the database contract can be validated before embeddings and generation are added.
+`POST /retrieve` uses structured listing filters plus pgvector semantic retrieval over embedded knowledge chunks. The current embedding backend is `local-hash-embedding-v1`, a deterministic local provider intended for repeatable development before an external embedding provider is chosen.

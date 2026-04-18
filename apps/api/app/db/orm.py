@@ -22,6 +22,31 @@ class Vector(UserDefinedType):
     def get_col_spec(self, **kw: Any) -> str:
         return f"vector({self.dimensions})"
 
+    def bind_processor(self, dialect: Any) -> Any:
+        def process(value: Any) -> str | None:
+            if value is None:
+                return None
+            if isinstance(value, str):
+                return value
+            return "[" + ",".join(f"{float(item):.8f}" for item in value) + "]"
+
+        return process
+
+    def result_processor(self, dialect: Any, coltype: Any) -> Any:
+        def process(value: Any) -> list[float] | None:
+            if value is None:
+                return None
+            if isinstance(value, list):
+                return [float(item) for item in value]
+            if isinstance(value, str):
+                stripped = value.strip("[]")
+                if not stripped:
+                    return []
+                return [float(item) for item in stripped.split(",")]
+            return value
+
+        return process
+
 
 class IngestionRunRecord(Base):
     __tablename__ = "ingestion_runs"
@@ -100,6 +125,7 @@ class DocumentChunkRecord(Base):
     embedding: Mapped[ChunkEmbeddingRecord | None] = relationship(
         back_populates="chunk",
         cascade="all, delete-orphan",
+        uselist=False,
     )
 
 
@@ -111,6 +137,7 @@ class ChunkEmbeddingRecord(Base):
         primary_key=True,
     )
     embedding_model: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str | None] = mapped_column(Text)
     embedding: Mapped[list[float]] = mapped_column(Vector(1536))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

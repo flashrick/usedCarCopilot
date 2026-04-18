@@ -6,9 +6,9 @@ Build an AI Used Car Decision Copilot that demonstrates real AI engineering abil
 
 ## Current Stage
 
-Stage: PostgreSQL backend scaffold verified.
+Stage: Hybrid retrieval backend scaffold verified.
 
-The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access now uses SQLAlchemy ORM sessions and mapped records. Seed ingestion and a non-LLM retrieval endpoint have been run successfully against a local pgvector Postgres container.
+The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, and pgvector semantic retrieval have been run successfully against a local pgvector Postgres container.
 
 ## Milestones
 
@@ -21,8 +21,9 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 - Completed: scaffold repository structure for frontend placeholder, backend, shared packages, data, and scripts.
 - Completed: define initial PostgreSQL and pgvector schema from the seed data contract.
 - Completed: add manual Honda Civic seed listing rows to close the listing coverage gap.
-- In progress: build ingestion and embedding pipeline. Seed ingestion is implemented and verified; embedding generation is pending.
-- In progress: build retrieval API and debug output. Structured retrieval is implemented and HTTP-verified; vector retrieval is pending.
+- Completed: add local deterministic embedding generation for `document_chunks` and store vectors in `chunk_embeddings`.
+- In progress: build ingestion and embedding pipeline. Seed ingestion and local embedding generation are implemented and verified; external provider integration is pending.
+- In progress: build retrieval API and debug output. Structured retrieval and pgvector semantic chunk retrieval are implemented and service-verified.
 - Pending: build recommendation API with citation-aware JSON output.
 - Pending: build decision-workbench UI.
 - Pending: add evaluation workflow and reporting.
@@ -39,7 +40,8 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 - The technical direction is FastAPI, Next.js, PostgreSQL, and pgvector.
 - The first backend uses FastAPI with psycopg and PostgreSQL, not SQLite.
 - Runtime database access uses SQLAlchemy ORM; raw SQL is reserved for migration files and minimal probes.
-- The first retrieval endpoint is non-LLM and non-embedding so the database contract can be validated before vector search and generation.
+- The first retrieval endpoint started as non-LLM and non-embedding so the database contract could be validated before vector search and generation.
+- The first embedding provider is a deterministic local hash embedding model so vector retrieval can be developed without external API keys. It is a development scaffold, not the final production embedding provider.
 - The system must combine structured listing filters with unstructured semantic retrieval.
 - Recommendation claims must be grounded with evidence citations.
 - Evaluation is part of the MVP, not a later optional polish step.
@@ -52,19 +54,20 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 
 ## Blockers
 
-- Embedding generation is not implemented yet.
+- No current implementation blocker for local hybrid retrieval.
+- External embedding and LLM provider choice remains open before production-quality recommendation generation.
 
 ## Next Skill
 
-Recommended next skill: `repo-architect`, followed by `backend-implementer`, `frontend-implementer`, and `test-engineer` once the scaffold and API contracts are clear.
+Recommended next skill: `test-engineer` for the first retrieval eval runner, followed by `backend-implementer` for recommendation JSON generation.
 
 ## Next Actions
 
-1. Add embedding generation for `document_chunks`.
-2. Store embeddings in `chunk_embeddings`.
-3. Add pgvector semantic retrieval alongside the existing structured retrieval.
-4. Add a first eval runner against `/retrieve`.
-5. Start frontend scaffolding once the retrieval response contract stabilizes.
+1. Add a first eval runner against `/retrieve`.
+2. Score whether retrieved chunks cover expected models and risk themes from `data/seed/eval_cases.json`.
+3. Add recommendation API with citation-aware JSON output.
+4. Choose or abstract the external embedding/LLM provider.
+5. Start frontend scaffolding once the retrieval and recommendation response contracts stabilize.
 
 ## Acceptance Gates
 
@@ -81,3 +84,4 @@ Recommended next skill: `repo-architect`, followed by `backend-implementer`, `fr
 - Added Postgres/pgvector backend scaffold, initial schema, seed ingestion command, and first structured retrieval API.
 - Verified Docker pgvector startup, migration, seed ingestion, `/health`, and `/retrieve` against local Postgres.
 - Replaced runtime psycopg query calls with SQLAlchemy ORM models, sessions, ingestion, and retrieval queries.
+- Added local chunk embedding generation, content-hash based skip behavior, pgvector semantic chunk retrieval, and `/retrieve` chunk debug output.

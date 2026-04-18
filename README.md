@@ -2,7 +2,7 @@
 
 AI Used Car Decision Copilot is a portfolio-grade AI engineering project for used car decision support. It combines structured vehicle listings with unstructured reviews, buying guides, and maintenance knowledge to produce grounded recommendations, risk flags, and comparison reports.
 
-This repository is currently in the planning stage. The first implementation target is a focused MVP that demonstrates RAG, hybrid retrieval, pgvector, citation-based generation, evaluation, and production-minded API/UI packaging.
+This repository is in the early backend implementation stage. The first implementation target is a focused MVP that demonstrates RAG, hybrid retrieval, pgvector, citation-based generation, evaluation, and production-minded API/UI packaging.
 
 ## Problem
 
@@ -58,7 +58,7 @@ The MVP should support one narrow data scope first:
 
 ## Current Status
 
-The repository now contains planning documents, seed data, and the first PostgreSQL-backed API scaffold. The next implementation step is to run the Postgres/pgvector database locally, apply the schema, ingest seed data, and validate the first retrieval endpoint.
+The repository now contains planning documents, seed data, and a PostgreSQL-backed FastAPI scaffold with seed ingestion, local chunk embedding generation, and pgvector semantic retrieval for `/retrieve`.
 
 ## Backend Quickstart
 
@@ -90,6 +90,12 @@ Ingest seed data:
 python3 apps/api/scripts/ingest_seed.py
 ```
 
+Generate local development embeddings for document chunks:
+
+```bash
+python3 apps/api/scripts/build_embeddings.py
+```
+
 Run the API:
 
 ```bash
@@ -101,4 +107,4 @@ First endpoints:
 - `GET /health`
 - `GET /listings`
 - `GET /knowledge`
-- `POST /retrieve`
+- `POST /retrieve`, returning structured listings, model-linked knowledge, semantic chunks, and retrieval debug metadata

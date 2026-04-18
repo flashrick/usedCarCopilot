@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import and_, bindparam, or_, select
+from sqlalchemy import and_, bindparam, case, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.connection import get_session
@@ -40,6 +40,32 @@ MODEL_ALIASES = {
     "Mazda CX-5": ("Mazda", "CX-5"),
 }
 
+SUPPORTED_BRANDS = ("Toyota", "Honda", "Mazda")
+
+NEGATED_BODY_TYPE_PATTERNS = {
+    "suv": ("do not want an suv", "don't want an suv", "not an suv", "no suv", "avoid suv"),
+    "hatchback": (
+        "do not want a hatchback",
+        "don't want a hatchback",
+        "not a hatchback",
+        "no hatchback",
+        "avoid hatchback",
+    ),
+    "sedan": ("do not want a sedan", "don't want a sedan", "not a sedan", "no sedan", "avoid sedan"),
+}
+
+RUNNING_COST_TERMS = (
+    "cheap to run",
+    "low running",
+    "running cost",
+    "fuel economy",
+    "fuel efficient",
+    "efficient",
+    "hybrid",
+)
+
+PREMIUM_TERMS = ("premium", "nicer", "upmarket", "comfortable")
+
 
 def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
     query = (request.query or "").lower()
@@ -48,13 +74,19 @@ def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
         if label.lower() in query and label not in models:
             models.append(label)
 
-    body_type = request.body_type
+    detected_brands = detect_brands(query)
+    requested_brands = dedupe_preserving_order([*request.brands, *detected_brands])
+    brand = request.brand
+    if brand is None and len(requested_brands) == 1:
+        brand = requested_brands[0]
+
+    body_type = request.body_type.lower() if request.body_type else None
     if body_type is None:
-        if "suv" in query:
+        if "suv" in query and not is_negated_body_type(query, "suv"):
             body_type = "suv"
-        elif "hatchback" in query:
+        elif "hatchback" in query and not is_negated_body_type(query, "hatchback"):
             body_type = "hatchback"
-        elif "sedan" in query:
+        elif "sedan" in query and not is_negated_body_type(query, "sedan"):
             body_type = "sedan"
 
     max_price = request.max_price
@@ -62,18 +94,21 @@ def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
         # Keep parsing intentionally conservative until a proper parser is added.
         import re
 
-        price_match = re.search(r"under\s+\$?([0-9][0-9,]*)", query)
+        price_match = re.search(r"(?:under|budget(?:\s+is)?(?:\s+around)?|around)\s+\$?([0-9][0-9,]*)", query)
         if price_match:
             max_price = int(price_match.group(1).replace(",", ""))
 
     return {
         "query": request.query,
         "max_price": max_price,
-        "brand": request.brand,
+        "brand": brand,
+        "brands": requested_brands,
         "models": models,
         "body_type": body_type,
         "location": request.location,
         "limit": request.limit,
+        "prefer_hybrid": any(term in query for term in RUNNING_COST_TERMS),
+        "prefer_premium": any(term in query for term in PREMIUM_TERMS),
     }
 
 
@@ -84,6 +119,50 @@ def model_pairs(models: list[str]) -> list[tuple[str, str]]:
         if pair and pair not in pairs:
             pairs.append(pair)
     return pairs
+
+
+def detect_brands(query: str) -> list[str]:
+    return [brand for brand in SUPPORTED_BRANDS if brand.lower() in query]
+
+
+def dedupe_preserving_order(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    for value in values:
+        normalized = value.strip()
+        if not normalized:
+            continue
+        canonical = next((brand for brand in SUPPORTED_BRANDS if brand.lower() == normalized.lower()), normalized)
+        if canonical not in deduped:
+            deduped.append(canonical)
+    return deduped
+
+
+def is_negated_body_type(query: str, body_type: str) -> bool:
+    return any(pattern in query for pattern in NEGATED_BODY_TYPE_PATTERNS[body_type])
+
+
+def listing_order(filters: dict[str, Any]) -> list[Any]:
+    order: list[Any] = []
+    if filters["prefer_hybrid"]:
+        order.append(case((ListingRecord.fuel_type.ilike("%hybrid%"), 0), else_=1))
+    if filters["prefer_premium"]:
+        order.extend(
+            [
+                ListingRecord.price.is_(None),
+                ListingRecord.price.desc(),
+                ListingRecord.year.desc().nulls_last(),
+            ]
+        )
+    order.extend(
+        [
+            ListingRecord.price.is_(None),
+            ListingRecord.price.asc(),
+            ListingRecord.mileage.is_(None),
+            ListingRecord.mileage.asc(),
+            ListingRecord.year.desc().nulls_last(),
+        ]
+    )
+    return order
 
 
 def retrieve_semantic_chunks(
@@ -115,6 +194,8 @@ def retrieve_semantic_chunks(
         )
     elif filters["brand"]:
         conditions.append(KnowledgeSourceRecord.brand == filters["brand"])
+    elif filters["brands"]:
+        conditions.append(KnowledgeSourceRecord.brand.in_(filters["brands"]))
 
     statement = (
         select(DocumentChunkRecord, KnowledgeSourceRecord, distance)
@@ -159,6 +240,8 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
         conditions.append(and_(ListingRecord.price.is_not(None), ListingRecord.price <= filters["max_price"]))
     if filters["brand"]:
         conditions.append(ListingRecord.brand == filters["brand"])
+    elif filters["brands"]:
+        conditions.append(ListingRecord.brand.in_(filters["brands"]))
     if filters["body_type"]:
         conditions.append(ListingRecord.body_type == filters["body_type"])
 
@@ -178,13 +261,7 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
     with get_session() as session:
         statement = (
             select(ListingRecord)
-            .order_by(
-                ListingRecord.price.is_(None),
-                ListingRecord.price.asc(),
-                ListingRecord.mileage.is_(None),
-                ListingRecord.mileage.asc(),
-                ListingRecord.year.desc().nulls_last(),
-            )
+            .order_by(*listing_order(filters))
             .limit(limit)
         )
         if conditions:

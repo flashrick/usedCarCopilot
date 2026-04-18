@@ -102,6 +102,12 @@ Run the API:
 uvicorn app.main:app --app-dir apps/api --reload
 ```
 
+Run the first retrieval eval set against the running API:
+
+```bash
+python3 apps/api/scripts/run_retrieval_eval.py --markdown-output documents/eval-report.md
+```
+
 First endpoints:
 
 - `GET /health`

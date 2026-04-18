@@ -51,6 +51,12 @@ Run the API:
 uvicorn app.main:app --app-dir apps/api --reload
 ```
 
+Run the retrieval eval set against the running API:
+
+```bash
+python3 apps/api/scripts/run_retrieval_eval.py --markdown-output documents/eval-report.md
+```
+
 ## Endpoints
 
 - `GET /health`
@@ -59,3 +65,5 @@ uvicorn app.main:app --app-dir apps/api --reload
 - `POST /retrieve`
 
 `POST /retrieve` uses structured listing filters plus pgvector semantic retrieval over embedded knowledge chunks. The current embedding backend is `local-hash-embedding-v1`, a deterministic local provider intended for repeatable development before an external embedding provider is chosen.
+
+The retrieval eval runner calls `POST /retrieve` for the 20 seed eval cases, then reports model recall, risk-theme recall, filter recall, semantic chunk coverage, and weakest cases.

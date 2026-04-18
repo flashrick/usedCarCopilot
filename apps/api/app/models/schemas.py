@@ -59,6 +59,7 @@ class RetrieveRequest(BaseModel):
     query: str | None = None
     max_price: int | None = None
     brand: str | None = None
+    brands: list[str] = Field(default_factory=list)
     models: list[str] = Field(default_factory=list)
     body_type: str | None = None
     location: str | None = "Auckland"

@@ -6,9 +6,9 @@ Build an AI Used Car Decision Copilot that demonstrates real AI engineering abil
 
 ## Current Stage
 
-Stage: Hybrid retrieval backend scaffold verified.
+Stage: Retrieval evaluation baseline added.
 
-The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, and pgvector semantic retrieval have been run successfully against a local pgvector Postgres container.
+The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, pgvector semantic retrieval, and the first retrieval eval runner have been run successfully against a local pgvector Postgres container.
 
 ## Milestones
 
@@ -22,11 +22,12 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 - Completed: define initial PostgreSQL and pgvector schema from the seed data contract.
 - Completed: add manual Honda Civic seed listing rows to close the listing coverage gap.
 - Completed: add local deterministic embedding generation for `document_chunks` and store vectors in `chunk_embeddings`.
+- Completed: add first HTTP retrieval eval runner and baseline `documents/eval-report.md`.
 - In progress: build ingestion and embedding pipeline. Seed ingestion and local embedding generation are implemented and verified; external provider integration is pending.
 - In progress: build retrieval API and debug output. Structured retrieval and pgvector semantic chunk retrieval are implemented and service-verified.
+- In progress: add evaluation workflow and reporting. The first retrieval eval report exists; generation/citation eval is pending.
 - Pending: build recommendation API with citation-aware JSON output.
 - Pending: build decision-workbench UI.
-- Pending: add evaluation workflow and reporting.
 - Pending: add deployment, screenshots, demo video, and public README polish.
 
 ## Accepted Decisions
@@ -59,13 +60,13 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 
 ## Next Skill
 
-Recommended next skill: `test-engineer` for the first retrieval eval runner, followed by `backend-implementer` for recommendation JSON generation.
+Recommended next skill: `backend-implementer` for recommendation JSON generation, followed by `test-engineer` for recommendation and citation eval coverage.
 
 ## Next Actions
 
-1. Add a first eval runner against `/retrieve`.
-2. Score whether retrieved chunks cover expected models and risk themes from `data/seed/eval_cases.json`.
-3. Add recommendation API with citation-aware JSON output.
+1. Add recommendation API with citation-aware JSON output.
+2. Add a recommendation eval pass for citation coverage and grounded risk flags.
+3. Improve retrieval parsing/ranking for the weakest eval cases in `documents/eval-report.md`.
 4. Choose or abstract the external embedding/LLM provider.
 5. Start frontend scaffolding once the retrieval and recommendation response contracts stabilize.
 
@@ -85,3 +86,4 @@ Recommended next skill: `test-engineer` for the first retrieval eval runner, fol
 - Verified Docker pgvector startup, migration, seed ingestion, `/health`, and `/retrieve` against local Postgres.
 - Replaced runtime psycopg query calls with SQLAlchemy ORM models, sessions, ingestion, and retrieval queries.
 - Added local chunk embedding generation, content-hash based skip behavior, pgvector semantic chunk retrieval, and `/retrieve` chunk debug output.
+- Added HTTP retrieval eval runner, generated `documents/eval-report.md`, and improved brand, budget, body-type negation, running-cost, and premium-intent retrieval behavior based on the first baseline.

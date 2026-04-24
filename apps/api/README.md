@@ -54,6 +54,32 @@ RECOMMENDATION_PROVIDER=deterministic
 RECOMMENDATION_MODEL=deterministic_ranker_with_citations
 ```
 
+Optional OpenAI-backed recommendation generation:
+
+```bash
+RECOMMENDATION_PROVIDER=openai
+RECOMMENDATION_MODEL=gpt-5-mini
+OPENAI_API_KEY=...
+```
+
+Alternative OpenAI-compatible AI providers:
+
+```bash
+RECOMMENDATION_PROVIDER=deepseek
+RECOMMENDATION_MODEL=deepseek-chat
+DEEPSEEK_API_KEY=...
+
+RECOMMENDATION_PROVIDER=qwen
+RECOMMENDATION_MODEL=qwen-plus
+QWEN_API_KEY=...
+
+RECOMMENDATION_PROVIDER=kimi
+RECOMMENDATION_MODEL=kimi-k2.6
+KIMI_API_KEY=...
+```
+
+If external AI generation is enabled but unavailable, `/recommend` falls back to the deterministic generator and reports the fallback reason in response debug metadata.
+
 Run the API:
 
 ```bash
@@ -91,4 +117,4 @@ cd apps/api
 
 The retrieval eval runner calls `POST /retrieve` for the 20 seed eval cases, then reports model recall, risk-theme recall, filter recall, semantic chunk coverage, and weakest cases.
 
-`POST /recommend` reuses retrieval context, ranks candidate listings with deterministic structured signals, selects a model-diverse top list, and returns match scores, reasons, risk flags, price commentary, next steps, and evidence ids. The current recommendation provider is `deterministic`; the provider boundary is ready for an LLM-backed generator behind the same response contract. The recommendation eval runner calls `POST /recommend` for the same 20 eval cases, then reports model recall, risk-theme recall, citation score, and weakest cases.
+`POST /recommend` reuses retrieval context, ranks candidate listings with deterministic structured signals, selects a model-diverse top list, and returns match scores, reasons, risk flags, price commentary, next steps, and evidence ids. The current local recommendation provider is `deterministic`; `openai`, `deepseek`, `qwen`, and `kimi` can be enabled for AI generation behind the same response contract. The recommendation eval runner calls `POST /recommend` for the same 20 eval cases, then reports model recall, risk-theme recall, citation score, and weakest cases.

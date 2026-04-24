@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 from time import perf_counter
 from typing import Any, Protocol
+import urllib.error
+import urllib.request
 
 from app.core.config import get_settings
 from app.db.connection import get_session
@@ -83,6 +86,73 @@ RISK_PATTERNS = (
 )
 
 
+OPENAI_DEFAULT_MODEL = "gpt-5-mini"
+COMPATIBLE_PROVIDER_DEFAULT_MODELS = {
+    "deepseek": "deepseek-chat",
+    "qwen": "qwen-plus",
+    "kimi": "kimi-k2.6",
+}
+
+
+RECOMMENDATION_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["query_summary", "recommended_cars"],
+    "properties": {
+        "query_summary": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["budget", "usage", "preferences"],
+            "properties": {
+                "budget": {"type": "string"},
+                "usage": {"type": "string"},
+                "preferences": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+        "recommended_cars": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "listing_id",
+                    "title",
+                    "match_score",
+                    "why_it_matches",
+                    "risk_flags",
+                    "price_commentary",
+                    "evidence_ids",
+                    "next_steps",
+                ],
+                "properties": {
+                    "listing_id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "match_score": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "why_it_matches": {"type": "array", "items": {"type": "string"}},
+                    "risk_flags": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["label", "severity", "reason", "evidence_ids"],
+                            "properties": {
+                                "label": {"type": "string"},
+                                "severity": {"type": "string", "enum": ["low", "medium", "high"]},
+                                "reason": {"type": "string"},
+                                "evidence_ids": {"type": "array", "items": {"type": "string"}},
+                            },
+                        },
+                    },
+                    "price_commentary": {"type": "string"},
+                    "evidence_ids": {"type": "array", "items": {"type": "string"}},
+                    "next_steps": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+    },
+}
+
+
 class RecommendationGenerator(Protocol):
     name: str
     model: str
@@ -147,17 +217,270 @@ class DeterministicRecommendationGenerator:
         }
 
 
-def get_recommendation_generator(provider_name: str | None = None, model: str | None = None) -> RecommendationGenerator:
+class OpenAIRecommendationGenerator:
+    name = "openai"
+
+    def __init__(
+        self,
+        api_key: str | None,
+        model: str = OPENAI_DEFAULT_MODEL,
+        base_url: str = "https://api.openai.com/v1",
+        timeout_seconds: float = 30,
+    ) -> None:
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self.fallback_generator = DeterministicRecommendationGenerator()
+
+    def generate(self, request: RecommendRequest, retrieval_response: dict[str, Any]) -> dict[str, Any]:
+        draft = self.fallback_generator.generate(request, retrieval_response)
+        if not self.api_key:
+            return with_generation_metadata(draft, {"source": "deterministic_fallback", "fallback_reason": "missing_openai_api_key"})
+
+        try:
+            generated = self._generate_with_openai(request, retrieval_response, draft)
+            validated = validate_llm_recommendation_payload(generated, draft)
+        except Exception as exc:
+            return with_generation_metadata(
+                draft,
+                {"source": "deterministic_fallback", "fallback_reason": f"{type(exc).__name__}: {exc}"},
+            )
+
+        return with_generation_metadata(validated, {"source": "openai"})
+
+    def _generate_with_openai(
+        self,
+        request: RecommendRequest,
+        retrieval_response: dict[str, Any],
+        draft: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = {
+            "model": self.model,
+            "input": [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": (
+                                "You are a used-car decision support generator. "
+                                "Return grounded JSON only. Keep the same listing_id order, titles, match_score values, "
+                                "and evidence_ids from the draft. Do not invent listings or citations. "
+                                "Rewrite reasons, risks, price commentary, and next steps only when the supplied evidence supports it."
+                            ),
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": json.dumps(
+                                {
+                                    "query": request.query,
+                                    "filters": retrieval_response.get("applied_filters", {}),
+                                    "draft_recommendation": draft,
+                                    "available_evidence": draft.get("evidence", []),
+                                },
+                                ensure_ascii=True,
+                            ),
+                        }
+                    ],
+                },
+            ],
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "used_car_recommendation",
+                    "schema": RECOMMENDATION_OUTPUT_SCHEMA,
+                    "strict": True,
+                }
+            },
+        }
+        response = self._post_response(payload)
+        response_text = extract_response_text(response)
+        if not response_text:
+            raise ValueError("OpenAI response did not contain output text")
+        return json.loads(response_text)
+
+    def _post_response(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request = urllib.request.Request(
+            f"{self.base_url}/responses",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"OpenAI request failed with HTTP {exc.code}: {trim(body, 240)}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"OpenAI request failed: {exc}") from exc
+
+
+class OpenAICompatibleChatRecommendationGenerator:
+    def __init__(
+        self,
+        name: str,
+        api_key: str | None,
+        model: str,
+        base_url: str,
+        timeout_seconds: float = 30,
+    ) -> None:
+        self.name = name
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self.fallback_generator = DeterministicRecommendationGenerator()
+
+    def generate(self, request: RecommendRequest, retrieval_response: dict[str, Any]) -> dict[str, Any]:
+        draft = self.fallback_generator.generate(request, retrieval_response)
+        if not self.api_key:
+            return with_generation_metadata(
+                draft,
+                {"source": "deterministic_fallback", "fallback_reason": f"missing_{self.name}_api_key"},
+            )
+
+        try:
+            generated = self._generate_with_chat_completions(request, retrieval_response, draft)
+            validated = validate_llm_recommendation_payload(generated, draft)
+        except Exception as exc:
+            return with_generation_metadata(
+                draft,
+                {"source": "deterministic_fallback", "fallback_reason": f"{type(exc).__name__}: {exc}"},
+            )
+
+        return with_generation_metadata(validated, {"source": self.name})
+
+    def _generate_with_chat_completions(
+        self,
+        request: RecommendRequest,
+        retrieval_response: dict[str, Any],
+        draft: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a used-car decision support generator. Return valid JSON only. "
+                        "The JSON object must contain query_summary and recommended_cars. "
+                        "Keep the same listing_id order, titles, match_score values, and evidence_ids from the draft. "
+                        "Do not invent listings, citations, or evidence ids. "
+                        "Rewrite reasons, risks, price commentary, and next steps only when supplied evidence supports it."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "query": request.query,
+                            "filters": retrieval_response.get("applied_filters", {}),
+                            "draft_recommendation": draft,
+                            "available_evidence": draft.get("evidence", []),
+                        },
+                        ensure_ascii=True,
+                    ),
+                },
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        response = self._post_chat_completion(payload)
+        response_text = extract_chat_completion_text(response)
+        if not response_text:
+            raise ValueError(f"{self.name} response did not contain message content")
+        return json.loads(response_text)
+
+    def _post_chat_completion(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"{self.name} request failed with HTTP {exc.code}: {trim(body, 240)}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"{self.name} request failed: {exc}") from exc
+
+
+def get_recommendation_generator(
+    provider_name: str | None = None,
+    model: str | None = None,
+    *,
+    openai_api_key: str | None = None,
+    openai_base_url: str = "https://api.openai.com/v1",
+    openai_timeout_seconds: float = 30,
+    deepseek_api_key: str | None = None,
+    deepseek_base_url: str = "https://api.deepseek.com",
+    qwen_api_key: str | None = None,
+    qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    kimi_api_key: str | None = None,
+    kimi_base_url: str = "https://api.moonshot.ai/v1",
+) -> RecommendationGenerator:
     provider = normalize(provider_name or "deterministic")
     if provider in {"deterministic", "local deterministic"}:
         return DeterministicRecommendationGenerator(model or "deterministic_ranker_with_citations")
+    if provider in {"openai", "openai responses"}:
+        selected_model = model
+        if not selected_model or selected_model == "deterministic_ranker_with_citations":
+            selected_model = OPENAI_DEFAULT_MODEL
+        return OpenAIRecommendationGenerator(
+            api_key=openai_api_key,
+            model=selected_model,
+            base_url=openai_base_url,
+            timeout_seconds=openai_timeout_seconds,
+        )
+    if provider in {"deepseek", "qwen", "kimi"}:
+        defaults = {
+            "deepseek": (deepseek_api_key, deepseek_base_url),
+            "qwen": (qwen_api_key, qwen_base_url),
+            "kimi": (kimi_api_key, kimi_base_url),
+        }
+        api_key, base_url = defaults[provider]
+        selected_model = selected_external_model(model, COMPATIBLE_PROVIDER_DEFAULT_MODELS[provider])
+        return OpenAICompatibleChatRecommendationGenerator(
+            name=provider,
+            api_key=api_key,
+            model=selected_model,
+            base_url=base_url,
+            timeout_seconds=openai_timeout_seconds,
+        )
     raise ValueError(f"Unsupported recommendation provider: {provider_name}")
 
 
 def recommend(request: RecommendRequest) -> dict[str, Any]:
     started_at = perf_counter()
     settings = get_settings()
-    generator = get_recommendation_generator(settings.recommendation_provider, settings.recommendation_model)
+    generator = get_recommendation_generator(
+        settings.recommendation_provider,
+        settings.recommendation_model,
+        openai_api_key=settings.openai_api_key,
+        openai_base_url=settings.openai_base_url,
+        openai_timeout_seconds=settings.openai_timeout_seconds,
+        deepseek_api_key=settings.deepseek_api_key,
+        deepseek_base_url=settings.deepseek_base_url,
+        qwen_api_key=settings.qwen_api_key,
+        qwen_base_url=settings.qwen_base_url,
+        kimi_api_key=settings.kimi_api_key,
+        kimi_base_url=settings.kimi_base_url,
+    )
     retrieval_limit = 20
     retrieval_request = request.model_copy(update={"limit": retrieval_limit})
     retrieval_response = retrieve(retrieval_request)
@@ -166,6 +489,7 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
     listings = retrieval_response["listings"]
     chunks = retrieval_response["chunks"]
     generated = generator.generate(request, retrieval_response)
+    generation_metadata = generated.pop("_generation_metadata", {})
 
     latency_ms = int((perf_counter() - started_at) * 1000)
     with get_session() as session:
@@ -194,9 +518,107 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
             "recommendation_provider": generator.name,
             "recommendation_mode": generator.model,
             "generation_model": generator.model,
+            "generation_source": generation_metadata.get("source", generator.name),
+            "generation_fallback_reason": generation_metadata.get("fallback_reason"),
             "latency_ms": latency_ms,
         },
     }
+
+
+def with_generation_metadata(payload: dict[str, Any], metadata: dict[str, str]) -> dict[str, Any]:
+    payload = dict(payload)
+    payload["_generation_metadata"] = metadata
+    return payload
+
+
+def selected_external_model(model: str | None, default_model: str) -> str:
+    if not model or model == "deterministic_ranker_with_citations":
+        return default_model
+    return model
+
+
+def extract_response_text(response: dict[str, Any]) -> str | None:
+    output_text = response.get("output_text")
+    if isinstance(output_text, str):
+        return output_text
+
+    text_parts: list[str] = []
+    for item in response.get("output", []):
+        for content in item.get("content", []):
+            if content.get("type") in {"output_text", "text"} and isinstance(content.get("text"), str):
+                text_parts.append(content["text"])
+    if text_parts:
+        return "".join(text_parts)
+    return None
+
+
+def extract_chat_completion_text(response: dict[str, Any]) -> str | None:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    message = choices[0].get("message", {})
+    content = message.get("content")
+    return content if isinstance(content, str) else None
+
+
+def validate_llm_recommendation_payload(generated: dict[str, Any], draft: dict[str, Any]) -> dict[str, Any]:
+    draft_cars = draft.get("recommended_cars", [])
+    generated_cars = generated.get("recommended_cars", [])
+    if len(generated_cars) != len(draft_cars):
+        raise ValueError("generated recommendation count does not match draft")
+
+    evidence = draft.get("evidence", [])
+    evidence_ids = {item["id"] for item in evidence}
+    validated_cars: list[dict[str, Any]] = []
+    for generated_car, draft_car in zip(generated_cars, draft_cars, strict=True):
+        if generated_car.get("listing_id") != draft_car.get("listing_id"):
+            raise ValueError("generated listing order or ids changed")
+        if generated_car.get("title") != draft_car.get("title"):
+            raise ValueError("generated listing title changed")
+        if generated_car.get("match_score") != draft_car.get("match_score"):
+            raise ValueError("generated match score changed")
+
+        car_evidence_ids = list(generated_car.get("evidence_ids", []))
+        if not car_evidence_ids or not set(car_evidence_ids).issubset(evidence_ids):
+            raise ValueError(f"{generated_car.get('listing_id')} has invalid evidence ids")
+
+        risk_flags = list(generated_car.get("risk_flags", []))
+        for flag in risk_flags:
+            flag_evidence_ids = list(flag.get("evidence_ids", []))
+            if not flag_evidence_ids or not set(flag_evidence_ids).issubset(evidence_ids):
+                raise ValueError(f"{generated_car.get('listing_id')} risk flag has invalid evidence ids")
+
+        validated_car = {
+            "listing_id": generated_car["listing_id"],
+            "title": generated_car["title"],
+            "match_score": generated_car["match_score"],
+            "why_it_matches": non_empty_strings(generated_car.get("why_it_matches")) or draft_car["why_it_matches"],
+            "risk_flags": risk_flags or draft_car["risk_flags"],
+            "price_commentary": generated_car.get("price_commentary") or draft_car["price_commentary"],
+            "evidence_ids": car_evidence_ids,
+            "next_steps": non_empty_strings(generated_car.get("next_steps")) or draft_car["next_steps"],
+        }
+        validated_cars.append(validated_car)
+
+    query_summary = generated.get("query_summary")
+    if not isinstance(query_summary, dict):
+        query_summary = draft["query_summary"]
+
+    return {
+        "query_summary": {
+            "budget": str(query_summary.get("budget") or draft["query_summary"]["budget"]),
+            "usage": str(query_summary.get("usage") or draft["query_summary"]["usage"]),
+            "preferences": non_empty_strings(query_summary.get("preferences")) or draft["query_summary"]["preferences"],
+        },
+        "recommended_cars": validated_cars,
+        "evidence": evidence,
+    }
+
+
+def non_empty_strings(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
 def select_diverse_recommendations(ranked_cars: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:

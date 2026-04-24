@@ -107,6 +107,32 @@ RECOMMENDATION_PROVIDER=deterministic
 RECOMMENDATION_MODEL=deterministic_ranker_with_citations
 ```
 
+Optional OpenAI-backed recommendation generation:
+
+```bash
+RECOMMENDATION_PROVIDER=openai
+RECOMMENDATION_MODEL=gpt-5-mini
+OPENAI_API_KEY=...
+```
+
+Alternative OpenAI-compatible AI providers:
+
+```bash
+RECOMMENDATION_PROVIDER=deepseek
+RECOMMENDATION_MODEL=deepseek-chat
+DEEPSEEK_API_KEY=...
+
+RECOMMENDATION_PROVIDER=qwen
+RECOMMENDATION_MODEL=qwen-plus
+QWEN_API_KEY=...
+
+RECOMMENDATION_PROVIDER=kimi
+RECOMMENDATION_MODEL=kimi-k2.6
+KIMI_API_KEY=...
+```
+
+If external AI generation is enabled but unavailable, `/recommend` falls back to the deterministic generator and reports the fallback reason in response debug metadata.
+
 Run the API:
 
 ```bash
@@ -139,3 +165,19 @@ First endpoints:
 - `GET /knowledge`
 - `POST /retrieve`, returning structured listings, model-linked knowledge, semantic chunks, and retrieval debug metadata
 - `POST /recommend`, returning top recommendations, match scores, risk flags, price commentary, next steps, and cited evidence
+
+## Frontend Quickstart
+
+The frontend lives in `apps/web` as a Next.js decision workbench.
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+By default the browser uses Next.js `/api/*` proxy routes that forward to `http://127.0.0.1:8000`. Override the backend target with:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+```

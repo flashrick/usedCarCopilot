@@ -1,20 +1,63 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.pyre/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+build/
+dist/
+.venv/
+venv/
+env/
+ENV/
 
+# Node / Next.js
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
 .env
 .env.*
 !.env.example
 
-.venv/
-venv/
-node_modules/
-*.egg-info/
+# Local databases and dumps
+*.db
+*.sqlite
+*.sqlite3
 
+# OS / editor files
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
 
+# Repository-specific generated files
 data/**/__pycache__/
 data/**/*.py[cod]
 data/tmp/
 data/cache/
+apps/api/.pytest_cache/
+apps/api/.mypy_cache/
+apps/web/.next/
+apps/web/coverage/
 learning/

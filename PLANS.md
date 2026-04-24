@@ -6,9 +6,9 @@ Build an AI Used Car Decision Copilot that demonstrates real AI engineering abil
 
 ## Current Stage
 
-Stage: Retrieval/ranking regression pass added.
+Stage: Provider abstraction added.
 
-The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, pgvector semantic retrieval, deterministic citation-aware recommendation generation, retrieval/recommendation eval runners, and focused backend regression tests have been run successfully against a local pgvector Postgres container.
+The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, pgvector semantic retrieval, deterministic citation-aware recommendation generation, provider selectors for embeddings and recommendations, retrieval/recommendation eval runners, and focused backend regression tests have been run successfully against a local pgvector Postgres container.
 
 ## Milestones
 
@@ -27,10 +27,11 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 - Completed: add first HTTP recommendation eval runner and baseline `documents/recommendation-eval-report.md`.
 - Completed: improve retrieval parsing/ranking for weak eval cases and refresh retrieval/recommendation eval reports.
 - Completed: add focused backend regression tests for `/recommend` citation integrity and model diversity.
-- In progress: build ingestion and embedding pipeline. Seed ingestion and local embedding generation are implemented and verified; external provider integration is pending.
+- Completed: add provider selectors for embedding generation and recommendation generation while preserving deterministic local defaults.
+- In progress: build ingestion and embedding pipeline. Seed ingestion, local embedding generation, and embedding provider selection are implemented and verified; external provider implementation is pending.
 - In progress: build retrieval API and debug output. Structured retrieval and pgvector semantic chunk retrieval are implemented and service-verified.
 - In progress: add evaluation workflow and reporting. Retrieval and deterministic recommendation eval reports exist; LLM generation eval is pending.
-- In progress: build recommendation API with citation-aware JSON output. Deterministic ranked recommendations are implemented; external LLM-backed generation is pending.
+- In progress: build recommendation API with citation-aware JSON output. Deterministic ranked recommendations and recommendation provider selection are implemented; external LLM-backed generation is pending.
 - Pending: build decision-workbench UI.
 - Pending: add deployment, screenshots, demo video, and public README polish.
 
@@ -64,11 +65,11 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 
 ## Next Skill
 
-Recommended next skill: `backend-implementer` for provider abstraction and LLM-backed generation, followed by `test-engineer` for LLM response regression coverage.
+Recommended next skill: `backend-implementer` for LLM-backed generation behind the provider boundary, followed by `test-engineer` for LLM response regression coverage.
 
 ## Next Actions
 
-1. Choose or abstract the external embedding/LLM provider.
+1. Choose the concrete external LLM provider for the first hosted/demo path.
 2. Add LLM-backed recommendation generation behind the existing stable JSON contract.
 3. Add LLM response regression checks for citation integrity, schema stability, and refusal/fallback behavior.
 4. Start frontend scaffolding once the recommendation response contract has one more LLM-backed regression pass.
@@ -93,3 +94,4 @@ Recommended next skill: `backend-implementer` for provider abstraction and LLM-b
 - Added HTTP retrieval eval runner, generated `documents/eval-report.md`, and improved brand, budget, body-type negation, running-cost, and premium-intent retrieval behavior based on the first baseline.
 - Added deterministic citation-aware `/recommend`, model-diverse recommendation ranking, HTTP recommendation eval runner, and generated `documents/recommendation-eval-report.md`.
 - Improved query context parsing, excluded-body-type handling, candidate model recall, low-risk ranking, risk-theme coverage, and `/recommend` citation regression tests.
+- Added configurable provider selectors for local hash embeddings and deterministic recommendations, plus regression coverage for supported and unsupported provider names.

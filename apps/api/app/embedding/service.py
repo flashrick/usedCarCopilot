@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+from typing import Protocol
 
 DEFAULT_EMBEDDING_DIMENSIONS = 1536
 DEFAULT_EMBEDDING_MODEL = "local-hash-embedding-v1"
@@ -26,6 +27,14 @@ DOMAIN_EXPANSIONS: dict[str, tuple[str, ...]] = {
 }
 
 
+class EmbeddingProvider(Protocol):
+    model: str
+    dimensions: int
+
+    def embed(self, text: str) -> list[float]:
+        """Return a fixed-size embedding vector for the supplied text."""
+
+
 def chunk_content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -33,8 +42,10 @@ def chunk_content_hash(text: str) -> str:
 class LocalHashEmbeddingProvider:
     """Deterministic local embedding for repeatable development without API keys."""
 
-    model = DEFAULT_EMBEDDING_MODEL
     dimensions = DEFAULT_EMBEDDING_DIMENSIONS
+
+    def __init__(self, model: str = DEFAULT_EMBEDDING_MODEL) -> None:
+        self.model = model
 
     def embed(self, text: str) -> list[float]:
         vector = [0.0] * self.dimensions
@@ -71,3 +82,16 @@ class LocalHashEmbeddingProvider:
         bucket = value % self.dimensions
         sign = 1.0 if value & 1 else -1.0
         return bucket, sign
+
+
+def get_embedding_provider(provider_name: str | None = None, model: str | None = None) -> EmbeddingProvider:
+    provider = normalize_provider_name(provider_name or "local_hash")
+    if provider in {"local hash", "localhash"}:
+        return LocalHashEmbeddingProvider(model or DEFAULT_EMBEDDING_MODEL)
+    raise ValueError(f"Unsupported embedding provider: {provider_name}")
+
+
+def normalize_provider_name(value: str) -> str:
+    text = value.lower().replace("_", " ")
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()

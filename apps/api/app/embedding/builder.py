@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.db.connection import get_session
 from app.db.orm import ChunkEmbeddingRecord, DocumentChunkRecord
-from app.embedding.service import LocalHashEmbeddingProvider, chunk_content_hash
+from app.embedding.service import chunk_content_hash, get_embedding_provider
 
 
 def build_chunk_embeddings(limit: int | None = None) -> dict[str, int | str]:
-    provider = LocalHashEmbeddingProvider()
+    settings = get_settings()
+    provider = get_embedding_provider(settings.embedding_provider, settings.embedding_model)
     embedded_count = 0
     skipped_count = 0
     scanned_count = 0

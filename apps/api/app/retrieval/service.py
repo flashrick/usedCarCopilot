@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import and_, bindparam, case, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.connection import get_session
 from app.db.orm import (
     ChunkEmbeddingRecord,
@@ -15,7 +16,7 @@ from app.db.orm import (
     RequestLogRecord,
     Vector,
 )
-from app.embedding.service import LocalHashEmbeddingProvider
+from app.embedding.service import get_embedding_provider
 from app.models.schemas import RetrieveRequest
 
 
@@ -265,7 +266,8 @@ def retrieve_semantic_chunks(
     if not query or not query.strip():
         return []
 
-    provider = LocalHashEmbeddingProvider()
+    settings = get_settings()
+    provider = get_embedding_provider(settings.embedding_provider, settings.embedding_model)
     query_embedding = provider.embed(query)
     distance = ChunkEmbeddingRecord.embedding.op("<=>")(
         bindparam("query_embedding", query_embedding, type_=Vector(provider.dimensions))
@@ -448,7 +450,7 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
             "candidate_models": [f"{brand} {model}" for brand, model in candidate_pairs],
             "retrieval_mode": "structured_filters_plus_semantic_chunks",
             "embedding_search_enabled": bool(semantic_chunks),
-            "embedding_model": LocalHashEmbeddingProvider.model,
+            "embedding_model": get_settings().embedding_model,
             "semantic_chunk_count": len(semantic_chunks),
         },
     }

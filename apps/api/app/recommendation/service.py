@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import re
 from time import perf_counter
-from typing import Any
+from typing import Any, Protocol
 
+from app.core.config import get_settings
 from app.db.connection import get_session
 from app.db.orm import RequestLogRecord
 from app.models.schemas import RecommendRequest
@@ -82,8 +83,81 @@ RISK_PATTERNS = (
 )
 
 
+class RecommendationGenerator(Protocol):
+    name: str
+    model: str
+
+    def generate(self, request: RecommendRequest, retrieval_response: dict[str, Any]) -> dict[str, Any]:
+        """Return the stable recommendation payload fields after retrieval."""
+
+
+class DeterministicRecommendationGenerator:
+    name = "deterministic"
+
+    def __init__(self, model: str = "deterministic_ranker_with_citations") -> None:
+        self.model = model
+
+    def generate(self, request: RecommendRequest, retrieval_response: dict[str, Any]) -> dict[str, Any]:
+        filters = retrieval_response["applied_filters"]
+        listings = retrieval_response["listings"]
+        chunks = retrieval_response["chunks"]
+        evidence: dict[str, dict[str, str]] = {}
+
+        scored_cars = []
+        for listing in listings:
+            relevant_chunks = find_relevant_chunks(listing, chunks)
+            risk_flags = build_risk_flags(listing, relevant_chunks)
+            match_score = score_listing(listing, filters, relevant_chunks, risk_flags)
+
+            scored_cars.append(
+                {
+                    "listing_id": value_of(listing, "listing_id"),
+                    "title": value_of(listing, "title"),
+                    "match_score": match_score,
+                    "why_it_matches": build_reasons(listing, filters, relevant_chunks),
+                    "risk_flags": risk_flags,
+                    "price_commentary": build_price_commentary(listing, filters),
+                    "evidence_ids": [],
+                    "next_steps": build_next_steps(listing, risk_flags),
+                    "_listing": listing,
+                    "_chunks": relevant_chunks,
+                    "_model_key": model_key(listing),
+                    "_price": value_of(listing, "price"),
+                    "_mileage": value_of(listing, "mileage"),
+                }
+            )
+
+        ranked_cars = sorted(
+            scored_cars,
+            key=lambda car: (-car["match_score"], car["_price"] is None, car["_price"] or 0, car["_mileage"] or 0),
+        )
+        recommended_cars = select_diverse_recommendations(ranked_cars, request.limit)
+        for car in recommended_cars:
+            car["evidence_ids"] = collect_evidence(car["_listing"], car["_chunks"], car["risk_flags"], evidence)
+            car.pop("_listing", None)
+            car.pop("_chunks", None)
+            car.pop("_model_key", None)
+            car.pop("_price", None)
+            car.pop("_mileage", None)
+
+        return {
+            "query_summary": build_query_summary(request.query, filters),
+            "recommended_cars": recommended_cars,
+            "evidence": list(evidence.values()),
+        }
+
+
+def get_recommendation_generator(provider_name: str | None = None, model: str | None = None) -> RecommendationGenerator:
+    provider = normalize(provider_name or "deterministic")
+    if provider in {"deterministic", "local deterministic"}:
+        return DeterministicRecommendationGenerator(model or "deterministic_ranker_with_citations")
+    raise ValueError(f"Unsupported recommendation provider: {provider_name}")
+
+
 def recommend(request: RecommendRequest) -> dict[str, Any]:
     started_at = perf_counter()
+    settings = get_settings()
+    generator = get_recommendation_generator(settings.recommendation_provider, settings.recommendation_model)
     retrieval_limit = 20
     retrieval_request = request.model_copy(update={"limit": retrieval_limit})
     retrieval_response = retrieve(retrieval_request)
@@ -91,44 +165,7 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
     filters = retrieval_response["applied_filters"]
     listings = retrieval_response["listings"]
     chunks = retrieval_response["chunks"]
-    evidence: dict[str, dict[str, str]] = {}
-
-    scored_cars = []
-    for listing in listings:
-        relevant_chunks = find_relevant_chunks(listing, chunks)
-        risk_flags = build_risk_flags(listing, relevant_chunks)
-        match_score = score_listing(listing, filters, relevant_chunks, risk_flags)
-
-        scored_cars.append(
-            {
-                "listing_id": value_of(listing, "listing_id"),
-                "title": value_of(listing, "title"),
-                "match_score": match_score,
-                "why_it_matches": build_reasons(listing, filters, relevant_chunks),
-                "risk_flags": risk_flags,
-                "price_commentary": build_price_commentary(listing, filters),
-                "evidence_ids": [],
-                "next_steps": build_next_steps(listing, risk_flags),
-                "_listing": listing,
-                "_chunks": relevant_chunks,
-                "_model_key": model_key(listing),
-                "_price": value_of(listing, "price"),
-                "_mileage": value_of(listing, "mileage"),
-            }
-        )
-
-    ranked_cars = sorted(
-        scored_cars,
-        key=lambda car: (-car["match_score"], car["_price"] is None, car["_price"] or 0, car["_mileage"] or 0),
-    )
-    recommended_cars = select_diverse_recommendations(ranked_cars, request.limit)
-    for car in recommended_cars:
-        car["evidence_ids"] = collect_evidence(car["_listing"], car["_chunks"], car["risk_flags"], evidence)
-        car.pop("_listing", None)
-        car.pop("_chunks", None)
-        car.pop("_model_key", None)
-        car.pop("_price", None)
-        car.pop("_mileage", None)
+    generated = generator.generate(request, retrieval_response)
 
     latency_ms = int((perf_counter() - started_at) * 1000)
     with get_session() as session:
@@ -137,16 +174,16 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
                 endpoint="/recommend",
                 query=request.query,
                 filters=filters,
-                listing_count=len(recommended_cars),
-                knowledge_count=len(evidence),
+                listing_count=len(generated["recommended_cars"]),
+                knowledge_count=len(generated["evidence"]),
                 latency_ms=latency_ms,
             )
         )
 
     return {
-        "query_summary": build_query_summary(request.query, filters),
-        "recommended_cars": recommended_cars,
-        "evidence": list(evidence.values()),
+        "query_summary": generated["query_summary"],
+        "recommended_cars": generated["recommended_cars"],
+        "evidence": generated["evidence"],
         "debug": {
             "retrieval_mode": retrieval_response["debug"].get("retrieval_mode"),
             "embedding_search_enabled": retrieval_response["debug"].get("embedding_search_enabled"),
@@ -154,7 +191,9 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
             "candidate_models": retrieval_response["debug"].get("candidate_models", []),
             "retrieved_listing_count": len(listings),
             "retrieved_chunk_count": len(chunks),
-            "recommendation_mode": "deterministic_ranker_with_citations",
+            "recommendation_provider": generator.name,
+            "recommendation_mode": generator.model,
+            "generation_model": generator.model,
             "latency_ms": latency_ms,
         },
     }

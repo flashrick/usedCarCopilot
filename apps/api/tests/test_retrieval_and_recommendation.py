@@ -3,12 +3,23 @@ from __future__ import annotations
 import unittest
 from contextlib import contextmanager
 
+from app.embedding.service import get_embedding_provider
 from app.models.schemas import RecommendRequest, RetrieveRequest
 from app.recommendation import service as recommendation_service
 from app.retrieval.service import infer_filters, select_diverse_listings
 
 
 class RetrievalParsingTests(unittest.TestCase):
+    def test_embedding_provider_selects_local_hash_provider(self) -> None:
+        provider = get_embedding_provider("local_hash", "local-hash-embedding-v1")
+
+        self.assertEqual(provider.model, "local-hash-embedding-v1")
+        self.assertEqual(len(provider.embed("Toyota Aqua city hybrid")), provider.dimensions)
+
+    def test_embedding_provider_rejects_unknown_provider(self) -> None:
+        with self.assertRaises(ValueError):
+            get_embedding_provider("unsupported")
+
     def test_infers_excluded_body_type_and_supported_brands(self) -> None:
         filters = infer_filters(
             RetrieveRequest(
@@ -58,6 +69,19 @@ class RetrievalParsingTests(unittest.TestCase):
 
 
 class RecommendationRegressionTests(unittest.TestCase):
+    def test_recommendation_generator_selects_deterministic_provider(self) -> None:
+        generator = recommendation_service.get_recommendation_generator(
+            "deterministic",
+            "deterministic_ranker_with_citations",
+        )
+
+        self.assertEqual(generator.name, "deterministic")
+        self.assertEqual(generator.model, "deterministic_ranker_with_citations")
+
+    def test_recommendation_generator_rejects_unknown_provider(self) -> None:
+        with self.assertRaises(ValueError):
+            recommendation_service.get_recommendation_generator("unsupported")
+
     def test_select_diverse_recommendations_prefers_distinct_models(self) -> None:
         ranked = [
             {"listing_id": "fit-1", "_model_key": "honda:fit"},
@@ -123,6 +147,8 @@ class RecommendationRegressionTests(unittest.TestCase):
             recommendation_service.get_session = original_get_session
 
         evidence_ids = {item["id"] for item in response["evidence"]}
+        self.assertEqual(response["debug"]["recommendation_provider"], "deterministic")
+        self.assertEqual(response["debug"]["generation_model"], "deterministic_ranker_with_citations")
         self.assertIn("chunk:chunk-4", evidence_ids)
         for car in response["recommended_cars"]:
             self.assertTrue(set(car["evidence_ids"]).issubset(evidence_ids))

@@ -98,6 +98,15 @@ Generate local development embeddings for document chunks:
 python3 apps/api/scripts/build_embeddings.py
 ```
 
+Optional local provider settings:
+
+```bash
+EMBEDDING_PROVIDER=local_hash
+EMBEDDING_MODEL=local-hash-embedding-v1
+RECOMMENDATION_PROVIDER=deterministic
+RECOMMENDATION_MODEL=deterministic_ranker_with_citations
+```
+
 Run the API:
 
 ```bash

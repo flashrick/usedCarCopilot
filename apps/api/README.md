@@ -45,6 +45,15 @@ Generate local development embeddings for knowledge chunks:
 python3 apps/api/scripts/build_embeddings.py
 ```
 
+Optional local provider settings:
+
+```bash
+EMBEDDING_PROVIDER=local_hash
+EMBEDDING_MODEL=local-hash-embedding-v1
+RECOMMENDATION_PROVIDER=deterministic
+RECOMMENDATION_MODEL=deterministic_ranker_with_citations
+```
+
 Run the API:
 
 ```bash
@@ -78,8 +87,8 @@ cd apps/api
 - `POST /retrieve`
 - `POST /recommend`
 
-`POST /retrieve` uses structured listing filters plus pgvector semantic retrieval over embedded knowledge chunks. The current embedding backend is `local-hash-embedding-v1`, a deterministic local provider intended for repeatable development before an external embedding provider is chosen.
+`POST /retrieve` uses structured listing filters plus pgvector semantic retrieval over embedded knowledge chunks. The current embedding provider is `local_hash` with model `local-hash-embedding-v1`, a deterministic local provider intended for repeatable development before an external embedding provider is chosen.
 
 The retrieval eval runner calls `POST /retrieve` for the 20 seed eval cases, then reports model recall, risk-theme recall, filter recall, semantic chunk coverage, and weakest cases.
 
-`POST /recommend` reuses retrieval context, ranks candidate listings with deterministic structured signals, selects a model-diverse top list, and returns match scores, reasons, risk flags, price commentary, next steps, and evidence ids. The recommendation eval runner calls `POST /recommend` for the same 20 eval cases, then reports model recall, risk-theme recall, citation score, and weakest cases.
+`POST /recommend` reuses retrieval context, ranks candidate listings with deterministic structured signals, selects a model-diverse top list, and returns match scores, reasons, risk flags, price commentary, next steps, and evidence ids. The current recommendation provider is `deterministic`; the provider boundary is ready for an LLM-backed generator behind the same response contract. The recommendation eval runner calls `POST /recommend` for the same 20 eval cases, then reports model recall, risk-theme recall, citation score, and weakest cases.

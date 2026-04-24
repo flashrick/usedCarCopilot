@@ -73,3 +73,45 @@ class RetrieveResponse(BaseModel):
     knowledge: list[KnowledgeSource]
     chunks: list[RetrievedChunk]
     debug: dict[str, Any]
+
+
+class QuerySummary(BaseModel):
+    budget: str
+    usage: str
+    preferences: list[str] = Field(default_factory=list)
+
+
+class RecommendationRiskFlag(BaseModel):
+    label: str
+    severity: str
+    reason: str
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class RecommendationEvidence(BaseModel):
+    id: str
+    source_type: str
+    title: str
+    snippet: str
+
+
+class RecommendedCar(BaseModel):
+    listing_id: str
+    title: str
+    match_score: int = Field(ge=0, le=100)
+    why_it_matches: list[str] = Field(default_factory=list)
+    risk_flags: list[RecommendationRiskFlag] = Field(default_factory=list)
+    price_commentary: str
+    evidence_ids: list[str] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
+
+
+class RecommendRequest(RetrieveRequest):
+    limit: int = Field(default=3, ge=1, le=10)
+
+
+class RecommendResponse(BaseModel):
+    query_summary: QuerySummary
+    recommended_cars: list[RecommendedCar]
+    evidence: list[RecommendationEvidence]
+    debug: dict[str, Any]

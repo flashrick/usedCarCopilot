@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from sqlalchemy import and_, bindparam, case, or_, select
@@ -39,6 +40,10 @@ MODEL_ALIASES = {
     "CX-5": ("Mazda", "CX-5"),
     "Mazda CX-5": ("Mazda", "CX-5"),
 }
+NORMALIZED_MODEL_ALIASES = {
+    re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", label.lower())).strip(): pair
+    for label, pair in MODEL_ALIASES.items()
+}
 
 SUPPORTED_BRANDS = ("Toyota", "Honda", "Mazda")
 
@@ -69,17 +74,21 @@ PREMIUM_TERMS = ("premium", "nicer", "upmarket", "comfortable")
 
 def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
     query = (request.query or "").lower()
+    normalized_query = normalize_text(query)
     models = list(request.models)
     for label in MODEL_ALIASES:
-        if label.lower() in query and label not in models:
+        if normalize_text(label) in normalized_query and label not in models:
             models.append(label)
 
     detected_brands = detect_brands(query)
+    if not detected_brands and "these brands" in normalized_query:
+        detected_brands = list(SUPPORTED_BRANDS)
     requested_brands = dedupe_preserving_order([*request.brands, *detected_brands])
     brand = request.brand
     if brand is None and len(requested_brands) == 1:
         brand = requested_brands[0]
 
+    exclude_body_type = detect_excluded_body_type(normalized_query)
     body_type = request.body_type.lower() if request.body_type else None
     if body_type is None:
         if "suv" in query and not is_negated_body_type(query, "suv"):
@@ -91,12 +100,11 @@ def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
 
     max_price = request.max_price
     if max_price is None:
-        # Keep parsing intentionally conservative until a proper parser is added.
-        import re
-
         price_match = re.search(r"(?:under|budget(?:\s+is)?(?:\s+around)?|around)\s+\$?([0-9][0-9,]*)", query)
         if price_match:
             max_price = int(price_match.group(1).replace(",", ""))
+
+    context_filters = infer_context_filters(normalized_query)
 
     return {
         "query": request.query,
@@ -105,17 +113,19 @@ def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
         "brands": requested_brands,
         "models": models,
         "body_type": body_type,
+        "exclude_body_type": exclude_body_type,
         "location": request.location,
         "limit": request.limit,
         "prefer_hybrid": any(term in query for term in RUNNING_COST_TERMS),
         "prefer_premium": any(term in query for term in PREMIUM_TERMS),
+        **context_filters,
     }
 
 
 def model_pairs(models: list[str]) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
     for model in models:
-        pair = MODEL_ALIASES.get(model)
+        pair = MODEL_ALIASES.get(model) or NORMALIZED_MODEL_ALIASES.get(normalize_text(model))
         if pair and pair not in pairs:
             pairs.append(pair)
     return pairs
@@ -141,6 +151,77 @@ def is_negated_body_type(query: str, body_type: str) -> bool:
     return any(pattern in query for pattern in NEGATED_BODY_TYPE_PATTERNS[body_type])
 
 
+def detect_excluded_body_type(normalized_query: str) -> str | None:
+    for body_type in NEGATED_BODY_TYPE_PATTERNS:
+        if is_negated_body_type(normalized_query, body_type):
+            return body_type
+    return None
+
+
+def infer_context_filters(normalized_query: str) -> dict[str, Any]:
+    filters: dict[str, Any] = {}
+    if "commut" in normalized_query:
+        filters["usage"] = "daily_commute" if "grocery" in normalized_query else "commute"
+    if "city" in normalized_query or "easy to park" in normalized_query:
+        filters["usage"] = "city" if "which of these" in normalized_query else filters.get("usage", "short_city_trips")
+    if "family" in normalized_query or "child" in normalized_query or "children" in normalized_query:
+        filters["usage"] = "small_family_errands" if "shopping" in normalized_query else "family"
+        filters["household_size"] = 3
+    if "uber" in normalized_query or "rideshare" in normalized_query:
+        filters["usage"] = "rideshare"
+    if "first car" in normalized_query or "new driver" in normalized_query:
+        filters["usage"] = "first_car"
+        filters["driver_profile"] = "new_driver"
+    if "highway" in normalized_query or "hamilton" in normalized_query:
+        filters["usage"] = "highway"
+        filters["route_profile"] = "intercity"
+    if "daily use" in normalized_query:
+        filters["usage"] = "daily_use"
+
+    if "check before" in normalized_query or "inspection" in normalized_query or "before purchase" in normalized_query:
+        filters["ownership_stage"] = "pre_purchase"
+        filters["intent"] = "inspection"
+    if "cheaper to own" in normalized_query:
+        filters["intent"] = "ownership_cost"
+    if "main risks" in normalized_query or "risk" in normalized_query:
+        filters["intent"] = "risk_assessment"
+    if "high mileage" in normalized_query:
+        filters["mileage_band"] = "high"
+
+    if "reliable" in normalized_query or "reliability" in normalized_query:
+        filters["priority"] = "reliability"
+    if "city driving" in normalized_query:
+        filters["priority"] = "city_driving"
+    if "fuel economy" in normalized_query:
+        filters["priority"] = "fuel_economy"
+    if "practical" in normalized_query or "practicality" in normalized_query:
+        filters["priority"] = "practicality"
+    if "low running" in normalized_query:
+        filters["priority"] = "low_running_cost"
+    if "cheap to run" in normalized_query:
+        filters["priority"] = "cheap_to_run"
+        filters["secondary_priority"] = "easy_parking"
+    if "premium feel" in normalized_query or "premium" in normalized_query:
+        filters["priority"] = "premium_feel"
+    if "low risk" in normalized_query:
+        filters["priority"] = "low_risk"
+    if "safer choice" in normalized_query or "safer choices" in normalized_query:
+        filters["priority"] = "safer_choice"
+    if "space" in normalized_query or "big enough" in normalized_query:
+        filters["priority"] = "space_practicality"
+    if "efficiency" in normalized_query or "short distances" in normalized_query:
+        filters["priority"] = "efficiency"
+
+    if "grocery" in normalized_query or "shopping" in normalized_query or "errand" in normalized_query:
+        filters["secondary_usage"] = "errands"
+    if "do not know much" in normalized_query or "simple" in normalized_query:
+        filters["user_profile"] = "novice_buyer"
+        filters["priority"] = "low_risk"
+    if "hybrid" in normalized_query:
+        filters["fuel_type"] = "hybrid"
+    return filters
+
+
 def listing_order(filters: dict[str, Any]) -> list[Any]:
     order: list[Any] = []
     if filters["prefer_hybrid"]:
@@ -150,6 +231,15 @@ def listing_order(filters: dict[str, Any]) -> list[Any]:
             [
                 ListingRecord.price.is_(None),
                 ListingRecord.price.desc(),
+                ListingRecord.year.desc().nulls_last(),
+            ]
+        )
+    if filters.get("priority") in {"low_risk", "safer_choice"}:
+        order.extend(
+            [
+                ListingRecord.price.is_(None),
+                ListingRecord.mileage.is_(None),
+                ListingRecord.mileage.asc(),
                 ListingRecord.year.desc().nulls_last(),
             ]
         )
@@ -230,13 +320,12 @@ def retrieve_semantic_chunks(
     return chunks
 
 
-def retrieve(request: RetrieveRequest) -> dict[str, Any]:
-    filters = infer_filters(request)
+def listing_conditions(filters: dict[str, Any], include_price: bool = True) -> list[Any]:
     conditions = []
 
     if filters["location"]:
         conditions.append(ListingRecord.location == filters["location"])
-    if filters["max_price"] is not None:
+    if include_price and filters["max_price"] is not None:
         conditions.append(and_(ListingRecord.price.is_not(None), ListingRecord.price <= filters["max_price"]))
     if filters["brand"]:
         conditions.append(ListingRecord.brand == filters["brand"])
@@ -244,6 +333,10 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
         conditions.append(ListingRecord.brand.in_(filters["brands"]))
     if filters["body_type"]:
         conditions.append(ListingRecord.body_type == filters["body_type"])
+    if filters.get("exclude_body_type"):
+        conditions.append(ListingRecord.body_type != filters["exclude_body_type"])
+    if filters.get("fuel_type") == "hybrid":
+        conditions.append(ListingRecord.fuel_type.ilike("%hybrid%"))
 
     pairs = model_pairs(filters["models"])
     if pairs:
@@ -255,21 +348,60 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
                 ]
             )
         )
+    return conditions
 
+
+def select_diverse_listings(listings: list[ListingRecord], limit: int) -> list[ListingRecord]:
+    if limit >= len(listings):
+        return listings
+
+    selected: list[ListingRecord] = []
+    selected_ids: set[str] = set()
+    seen_models: set[tuple[str, str]] = set()
+    for listing in listings:
+        model = (listing.brand, listing.model)
+        if model in seen_models:
+            continue
+        selected.append(listing)
+        selected_ids.add(listing.listing_id)
+        seen_models.add(model)
+        if len(selected) >= limit:
+            return selected
+
+    for listing in listings:
+        if listing.listing_id in selected_ids:
+            continue
+        selected.append(listing)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def retrieve(request: RetrieveRequest) -> dict[str, Any]:
+    filters = infer_filters(request)
+    conditions = listing_conditions(filters)
     limit = filters["limit"]
 
     with get_session() as session:
         statement = (
             select(ListingRecord)
             .order_by(*listing_order(filters))
-            .limit(limit)
+            .limit(max(limit * 6, 30))
         )
         if conditions:
             statement = statement.where(and_(*conditions))
 
-        listings = list(session.scalars(statement))
+        candidate_listing_rows = list(session.scalars(statement))
+        listings = select_diverse_listings(candidate_listing_rows, limit)
 
-        candidate_pairs = sorted({(row.brand, row.model) for row in listings})
+        candidate_statement = select(ListingRecord.brand, ListingRecord.model).distinct()
+        candidate_conditions = listing_conditions(filters, include_price=False)
+        if candidate_conditions:
+            candidate_statement = candidate_statement.where(and_(*candidate_conditions))
+        candidate_pair_rows = session.execute(candidate_statement).all()
+        candidate_pairs = sorted((brand, model) for brand, model in candidate_pair_rows) or sorted(
+            {(row.brand, row.model) for row in candidate_listing_rows}
+        )
         knowledge: list[KnowledgeSourceRecord] = []
         if candidate_pairs:
             knowledge = list(
@@ -320,3 +452,10 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
             "semantic_chunk_count": len(semantic_chunks),
         },
     }
+
+
+def normalize_text(value: Any) -> str:
+    text = "" if value is None else str(value).lower()
+    text = text.replace("-", " ")
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()

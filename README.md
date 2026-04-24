@@ -52,13 +52,15 @@ The MVP should support one narrow data scope first:
 - [Technical Architecture](documents/technical-architecture.md)
 - [Data And Evaluation Plan](documents/data-and-evaluation-plan.md)
 - [Delivery Roadmap](documents/delivery-roadmap.md)
+- [Retrieval Eval Report](documents/eval-report.md)
+- [Recommendation Eval Report](documents/recommendation-eval-report.md)
 - [Original Portfolio Plan](documents/README.md)
 - [Original Build Guide](documents/used-car-rag-build-guide.md)
 - [LinkedIn And HR Pack](documents/linkedin-hr-pack.md)
 
 ## Current Status
 
-The repository now contains planning documents, seed data, and a PostgreSQL-backed FastAPI scaffold with seed ingestion, local chunk embedding generation, and pgvector semantic retrieval for `/retrieve`.
+The repository now contains planning documents, seed data, and a PostgreSQL-backed FastAPI scaffold with seed ingestion, local chunk embedding generation, pgvector semantic retrieval for `/retrieve`, and deterministic citation-aware recommendations for `/recommend`.
 
 ## Backend Quickstart
 
@@ -108,9 +110,23 @@ Run the first retrieval eval set against the running API:
 python3 apps/api/scripts/run_retrieval_eval.py --markdown-output documents/eval-report.md
 ```
 
+Run the first recommendation eval set against the running API:
+
+```bash
+python3 apps/api/scripts/run_recommendation_eval.py --markdown-output documents/recommendation-eval-report.md
+```
+
+Run focused backend regression tests:
+
+```bash
+cd apps/api
+../../.venv/bin/python -m unittest discover -s tests -v
+```
+
 First endpoints:
 
 - `GET /health`
 - `GET /listings`
 - `GET /knowledge`
 - `POST /retrieve`, returning structured listings, model-linked knowledge, semantic chunks, and retrieval debug metadata
+- `POST /recommend`, returning top recommendations, match scores, risk flags, price commentary, next steps, and cited evidence

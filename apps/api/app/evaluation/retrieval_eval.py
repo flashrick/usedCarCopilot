@@ -363,7 +363,21 @@ def score_filters(expected_filters: dict[str, Any], applied_filters: dict[str, A
             applied = {canonical_model_name(model) for model in applied_filters.get("models", [])}
             if requested and requested.issubset(applied):
                 hits.append(key)
+        elif key == "exclude_body_type" and normalize_text(applied_filters.get("exclude_body_type")) == normalize_text(expected_value):
+            hits.append(key)
+        elif key == "fuel_type" and normalize_text(expected_value) in normalize_text(applied_filters.get("fuel_type")):
+            hits.append(key)
+        elif normalize_expected_filter(expected_value) == normalize_expected_filter(applied_filters.get(key)):
+            hits.append(key)
     return hits
+
+
+def normalize_expected_filter(value: Any) -> Any:
+    if isinstance(value, str):
+        return normalize_text(value)
+    if isinstance(value, list):
+        return sorted(normalize_text(item) for item in value)
+    return value
 
 
 def risk_theme_matches(theme: str, normalized_text: str) -> bool:

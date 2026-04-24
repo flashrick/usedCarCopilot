@@ -5,7 +5,8 @@ from sqlalchemy import select, text
 
 from app.db.connection import get_session
 from app.db.orm import KnowledgeSourceRecord, ListingRecord
-from app.models.schemas import KnowledgeSource, Listing, RetrieveRequest, RetrieveResponse
+from app.models.schemas import KnowledgeSource, Listing, RecommendRequest, RecommendResponse, RetrieveRequest, RetrieveResponse
+from app.recommendation.service import recommend
 from app.retrieval.service import retrieve
 
 
@@ -54,3 +55,8 @@ def list_knowledge(limit: int = 20) -> list[KnowledgeSourceRecord]:
 @router.post("/retrieve", response_model=RetrieveResponse)
 def retrieve_context(request: RetrieveRequest) -> dict:
     return retrieve(request)
+
+
+@router.post("/recommend", response_model=RecommendResponse)
+def recommend_cars(request: RecommendRequest) -> dict:
+    return recommend(request)

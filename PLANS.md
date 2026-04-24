@@ -6,9 +6,9 @@ Build an AI Used Car Decision Copilot that demonstrates real AI engineering abil
 
 ## Current Stage
 
-Stage: Retrieval evaluation baseline added.
+Stage: Retrieval/ranking regression pass added.
 
-The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, pgvector semantic retrieval, and the first retrieval eval runner have been run successfully against a local pgvector Postgres container.
+The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, pgvector semantic retrieval, deterministic citation-aware recommendation generation, retrieval/recommendation eval runners, and focused backend regression tests have been run successfully against a local pgvector Postgres container.
 
 ## Milestones
 
@@ -23,10 +23,14 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 - Completed: add manual Honda Civic seed listing rows to close the listing coverage gap.
 - Completed: add local deterministic embedding generation for `document_chunks` and store vectors in `chunk_embeddings`.
 - Completed: add first HTTP retrieval eval runner and baseline `documents/eval-report.md`.
+- Completed: add deterministic citation-aware `POST /recommend` response contract.
+- Completed: add first HTTP recommendation eval runner and baseline `documents/recommendation-eval-report.md`.
+- Completed: improve retrieval parsing/ranking for weak eval cases and refresh retrieval/recommendation eval reports.
+- Completed: add focused backend regression tests for `/recommend` citation integrity and model diversity.
 - In progress: build ingestion and embedding pipeline. Seed ingestion and local embedding generation are implemented and verified; external provider integration is pending.
 - In progress: build retrieval API and debug output. Structured retrieval and pgvector semantic chunk retrieval are implemented and service-verified.
-- In progress: add evaluation workflow and reporting. The first retrieval eval report exists; generation/citation eval is pending.
-- Pending: build recommendation API with citation-aware JSON output.
+- In progress: add evaluation workflow and reporting. Retrieval and deterministic recommendation eval reports exist; LLM generation eval is pending.
+- In progress: build recommendation API with citation-aware JSON output. Deterministic ranked recommendations are implemented; external LLM-backed generation is pending.
 - Pending: build decision-workbench UI.
 - Pending: add deployment, screenshots, demo video, and public README polish.
 
@@ -55,20 +59,20 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 
 ## Blockers
 
-- No current implementation blocker for local hybrid retrieval.
+- No current implementation blocker for local hybrid retrieval or deterministic recommendations.
 - External embedding and LLM provider choice remains open before production-quality recommendation generation.
 
 ## Next Skill
 
-Recommended next skill: `backend-implementer` for recommendation JSON generation, followed by `test-engineer` for recommendation and citation eval coverage.
+Recommended next skill: `backend-implementer` for provider abstraction and LLM-backed generation, followed by `test-engineer` for LLM response regression coverage.
 
 ## Next Actions
 
-1. Add recommendation API with citation-aware JSON output.
-2. Add a recommendation eval pass for citation coverage and grounded risk flags.
-3. Improve retrieval parsing/ranking for the weakest eval cases in `documents/eval-report.md`.
-4. Choose or abstract the external embedding/LLM provider.
-5. Start frontend scaffolding once the retrieval and recommendation response contracts stabilize.
+1. Choose or abstract the external embedding/LLM provider.
+2. Add LLM-backed recommendation generation behind the existing stable JSON contract.
+3. Add LLM response regression checks for citation integrity, schema stability, and refusal/fallback behavior.
+4. Start frontend scaffolding once the recommendation response contract has one more LLM-backed regression pass.
+5. Add deployment, screenshots, demo video, and public README polish after the UI can run end to end.
 
 ## Acceptance Gates
 
@@ -87,3 +91,5 @@ Recommended next skill: `backend-implementer` for recommendation JSON generation
 - Replaced runtime psycopg query calls with SQLAlchemy ORM models, sessions, ingestion, and retrieval queries.
 - Added local chunk embedding generation, content-hash based skip behavior, pgvector semantic chunk retrieval, and `/retrieve` chunk debug output.
 - Added HTTP retrieval eval runner, generated `documents/eval-report.md`, and improved brand, budget, body-type negation, running-cost, and premium-intent retrieval behavior based on the first baseline.
+- Added deterministic citation-aware `/recommend`, model-diverse recommendation ranking, HTTP recommendation eval runner, and generated `documents/recommendation-eval-report.md`.
+- Improved query context parsing, excluded-body-type handling, candidate model recall, low-risk ranking, risk-theme coverage, and `/recommend` citation regression tests.

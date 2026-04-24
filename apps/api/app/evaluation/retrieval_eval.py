@@ -94,6 +94,16 @@ TERM_ALIASES: dict[str, tuple[str, ...]] = {
     "wear": ("condition", "maintenance"),
 }
 
+THEME_ALIASES: dict[str, tuple[str, ...]] = {
+    "feature variation by year": ("newer trims", "trim level", "equipment", "features by year"),
+    "intended use match": ("genuine suv needs", "match it to actual", "intended driving pattern", "daily use"),
+    "parking damage": ("body repair", "accident repair", "paint", "panel gaps", "parking damage"),
+    "trim differences": ("trim level", "newer trims", "more expensive to maintain", "feature variation"),
+    "used condition": ("condition evidence", "clean service record", "neglected", "documentation", "overall condition"),
+    "used import condition": ("imported vehicle condition", "fresh import", "imported hatchback", "imported wagon"),
+    "visibility": ("road visibility", "higher seating position", "easy urban driving", "easy to drive and park"),
+}
+
 
 @dataclass(frozen=True)
 class RetrievalEvalConfig:
@@ -383,6 +393,8 @@ def normalize_expected_filter(value: Any) -> Any:
 def risk_theme_matches(theme: str, normalized_text: str) -> bool:
     normalized_theme = normalize_text(theme)
     if normalized_theme in normalized_text:
+        return True
+    if any(normalize_text(alias) in normalized_text for alias in THEME_ALIASES.get(normalized_theme, ())):
         return True
 
     terms = [term for term in normalized_theme.split() if term not in STOPWORDS and len(term) > 2]

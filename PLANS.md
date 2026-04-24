@@ -6,9 +6,9 @@ Build an AI Used Car Decision Copilot that demonstrates real AI engineering abil
 
 ## Current Stage
 
-Stage: Selectable AI recommendation providers added.
+Stage: Live AI provider validation workflow added.
 
-The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, pgvector semantic retrieval, deterministic citation-aware recommendation generation, provider selectors for embeddings and recommendations, selectable AI recommendation providers with deterministic fallback, retrieval/recommendation eval runners, and focused backend regression tests have been run successfully against a local pgvector Postgres container.
+The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, pgvector semantic retrieval, deterministic citation-aware recommendation generation, provider selectors for embeddings and recommendations, selectable AI recommendation providers with deterministic fallback, retrieval/recommendation eval runners, live-provider validation tooling, and focused backend regression tests have been run successfully against a local pgvector Postgres container.
 
 ## Milestones
 
@@ -30,6 +30,7 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 - Completed: add provider selectors for embedding generation and recommendation generation while preserving deterministic local defaults.
 - Completed: add OpenAI-backed structured recommendation provider behind the existing `/recommend` JSON contract, with deterministic fallback on missing key, API failure, or citation/schema validation failure.
 - Completed: add selectable DeepSeek, Qwen, and Kimi recommendation providers through OpenAI-compatible Chat Completions with JSON-mode output, citation validation, and deterministic fallback.
+- Completed: add repeatable live AI-provider validation tooling for `openai`, `deepseek`, `qwen`, and `kimi`, with missing-key skips and failure on deterministic fallback or invalid citations.
 - In progress: build ingestion and embedding pipeline. Seed ingestion, local embedding generation, and embedding provider selection are implemented and verified; external provider implementation is pending.
 - In progress: build retrieval API and debug output. Structured retrieval and pgvector semantic chunk retrieval are implemented and service-verified.
 - In progress: add evaluation workflow and reporting. Retrieval and deterministic recommendation eval reports exist; LLM generation eval is pending.
@@ -71,9 +72,9 @@ Recommended next skill: `test-engineer` for live OpenAI-provider validation and 
 
 ## Next Actions
 
-1. Run live AI-provider validation with real keys for `openai`, `deepseek`, `qwen`, and `kimi` as available.
+1. Run `python3 apps/api/scripts/validate_ai_providers.py --fail-on-skip` after real provider keys are available.
 2. Tune provider prompts against the 20 eval cases if live generations expose wording, citation, or fallback issues.
-3. Start frontend scaffolding for the decision workbench using the stable `/retrieve` and `/recommend` response contracts.
+3. Continue frontend decision-workbench integration using the stable `/retrieve` and `/recommend` response contracts.
 4. Add deployment, screenshots, demo video, and public README polish after the UI can run end to end.
 5. Add hosted-environment provider configuration notes once the API deployment target is chosen.
 
@@ -99,3 +100,4 @@ Recommended next skill: `test-engineer` for live OpenAI-provider validation and 
 - Added configurable provider selectors for local hash embeddings and deterministic recommendations, plus regression coverage for supported and unsupported provider names.
 - Added OpenAI Responses API recommendation generation with Structured Outputs, local citation validation, deterministic fallback, and regression tests for success and fallback paths.
 - Added DeepSeek, Qwen, and Kimi recommendation provider options through OpenAI-compatible Chat Completions with JSON-mode response handling and fallback regression tests.
+- Added repeatable live AI-provider validation tooling; local execution skips providers without API keys and fails providers that fall back or produce invalid citations.

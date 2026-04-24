@@ -49,7 +49,7 @@ def evaluate_case(case: dict[str, Any], config: RecommendationEvalConfig) -> dic
         "expected_models": expected_models,
         "recommended_models": recommended_models,
         "model_hits": model_hits,
-        "model_recall": ratio(len(model_hits), len(expected_models)),
+        "model_recall": capped_model_recall(len(model_hits), len(expected_models), config.limit),
         "expected_risk_themes": expected_risks,
         "risk_theme_hits": risk_hits,
         "risk_theme_recall": ratio(len(risk_hits), len(expected_risks)),
@@ -60,6 +60,10 @@ def evaluate_case(case: dict[str, Any], config: RecommendationEvalConfig) -> dic
         "recommendation_mode": response.get("debug", {}).get("recommendation_mode"),
         "embedding_model": response.get("debug", {}).get("embedding_model"),
     }
+
+
+def capped_model_recall(hit_count: int, expected_count: int, recommendation_limit: int) -> float:
+    return ratio(hit_count, min(expected_count, recommendation_limit))
 
 
 def post_recommend(api_url: str, query: str, limit: int, timeout_seconds: float) -> dict[str, Any]:

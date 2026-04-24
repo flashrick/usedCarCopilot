@@ -98,6 +98,14 @@ Run the recommendation eval set against the running API:
 python3 apps/api/scripts/run_recommendation_eval.py --markdown-output documents/recommendation-eval-report.md
 ```
 
+Validate live AI recommendation providers when API keys are available:
+
+```bash
+python3 apps/api/scripts/validate_ai_providers.py
+```
+
+The validation script checks `openai`, `deepseek`, `qwen`, and `kimi` by default. Providers without API keys are reported as skipped unless `--fail-on-skip` is supplied. Any provider that falls back to deterministic generation or returns invalid citations fails validation.
+
 Run focused backend regression tests:
 
 ```bash

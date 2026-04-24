@@ -48,6 +48,18 @@ NORMALIZED_MODEL_ALIASES = {
 
 SUPPORTED_BRANDS = ("Toyota", "Honda", "Mazda")
 
+BODY_TYPE_BY_MODEL = {
+    ("Honda", "Civic"): "sedan",
+    ("Honda", "Fit"): "hatchback",
+    ("Honda", "HR-V"): "suv",
+    ("Mazda", "CX-5"): "suv",
+    ("Mazda", "Mazda2"): "hatchback",
+    ("Mazda", "Mazda3"): "hatchback",
+    ("Toyota", "Aqua"): "hatchback",
+    ("Toyota", "Prius"): "hatchback",
+    ("Toyota", "RAV4"): "suv",
+}
+
 NEGATED_BODY_TYPE_PATTERNS = {
     "suv": ("do not want an suv", "don't want an suv", "not an suv", "no suv", "avoid suv"),
     "hatchback": (
@@ -98,6 +110,10 @@ def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
             body_type = "hatchback"
         elif "sedan" in query and not is_negated_body_type(query, "sedan"):
             body_type = "sedan"
+        else:
+            inferred_body_type = infer_body_type_from_models(model_pairs(models))
+            if inferred_body_type:
+                body_type = inferred_body_type
 
     max_price = request.max_price
     if max_price is None:
@@ -130,6 +146,14 @@ def model_pairs(models: list[str]) -> list[tuple[str, str]]:
         if pair and pair not in pairs:
             pairs.append(pair)
     return pairs
+
+
+def infer_body_type_from_models(pairs: list[tuple[str, str]]) -> str | None:
+    mapped_body_types = [BODY_TYPE_BY_MODEL[pair] for pair in pairs if pair in BODY_TYPE_BY_MODEL]
+    body_types = set(mapped_body_types)
+    if pairs and len(mapped_body_types) == len(pairs) and len(body_types) == 1:
+        return next(iter(body_types))
+    return None
 
 
 def detect_brands(query: str) -> list[str]:
@@ -168,8 +192,11 @@ def infer_context_filters(normalized_query: str) -> dict[str, Any]:
     if "family" in normalized_query or "child" in normalized_query or "children" in normalized_query:
         filters["usage"] = "small_family_errands" if "shopping" in normalized_query else "family"
         filters["household_size"] = 3
+        if "shopping" in normalized_query or "too small" in normalized_query or "carry" in normalized_query:
+            filters["priority"] = "practicality"
     if "uber" in normalized_query or "rideshare" in normalized_query:
         filters["usage"] = "rideshare"
+        filters["priority"] = "fuel_economy"
     if "first car" in normalized_query or "new driver" in normalized_query:
         filters["usage"] = "first_car"
         filters["driver_profile"] = "new_driver"
@@ -178,6 +205,9 @@ def infer_context_filters(normalized_query: str) -> dict[str, Any]:
         filters["route_profile"] = "intercity"
     if "daily use" in normalized_query:
         filters["usage"] = "daily_use"
+    if "short distance" in normalized_query or "short distances" in normalized_query:
+        filters["usage"] = "short_city_trips"
+        filters["priority"] = "efficiency"
 
     if "check before" in normalized_query or "inspection" in normalized_query or "before purchase" in normalized_query:
         filters["ownership_stage"] = "pre_purchase"

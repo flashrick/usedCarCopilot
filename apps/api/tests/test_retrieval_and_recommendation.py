@@ -3,8 +3,13 @@ from __future__ import annotations
 import json
 import unittest
 from contextlib import contextmanager
+from pathlib import Path
 
+from app.core.config import Settings
 from app.embedding.service import get_embedding_provider
+from app.evaluation.provider_validation import provider_api_key, validate_provider
+from app.evaluation.recommendation_eval import capped_model_recall
+from app.evaluation.retrieval_eval import normalize_text, risk_theme_matches
 from app.models.schemas import RecommendRequest, RetrieveRequest
 from app.recommendation import service as recommendation_service
 from app.retrieval.service import infer_filters, select_diverse_listings
@@ -50,6 +55,39 @@ class RetrievalParsingTests(unittest.TestCase):
         self.assertEqual(filters["priority"], "low_risk")
         self.assertEqual(filters["user_profile"], "novice_buyer")
 
+    def test_infers_eval_context_for_short_distance_and_ownership_queries(self) -> None:
+        short_trip_filters = infer_filters(
+            RetrieveRequest(query="I drive mostly short distances. Should I get a Honda Fit or Toyota Aqua?")
+        )
+        self.assertIn("Toyota Aqua", short_trip_filters["models"])
+        self.assertIn("Honda Fit", short_trip_filters["models"])
+        self.assertEqual(short_trip_filters["usage"], "short_city_trips")
+        self.assertEqual(short_trip_filters["priority"], "efficiency")
+
+        suv_cost_filters = infer_filters(
+            RetrieveRequest(query="Which is likely to be cheaper to own: Mazda CX-5 or Toyota RAV4?")
+        )
+        self.assertIn("Toyota RAV4", suv_cost_filters["models"])
+        self.assertIn("Mazda CX-5", suv_cost_filters["models"])
+        self.assertEqual(suv_cost_filters["intent"], "ownership_cost")
+        self.assertEqual(suv_cost_filters["body_type"], "suv")
+
+    def test_infers_rideshare_and_small_family_priorities(self) -> None:
+        rideshare_filters = infer_filters(
+            RetrieveRequest(query="Is a used Toyota Prius a good choice for Uber-style driving in Auckland?")
+        )
+        self.assertIn("Toyota Prius", rideshare_filters["models"])
+        self.assertEqual(rideshare_filters["usage"], "rideshare")
+        self.assertEqual(rideshare_filters["priority"], "fuel_economy")
+
+        family_filters = infer_filters(
+            RetrieveRequest(query="Is Mazda2 too small if I sometimes carry a child and shopping bags?")
+        )
+        self.assertEqual(family_filters["models"], ["Mazda2"])
+        self.assertEqual(family_filters["usage"], "small_family_errands")
+        self.assertEqual(family_filters["household_size"], 3)
+        self.assertEqual(family_filters["priority"], "practicality")
+
     def test_select_diverse_listings_prefers_model_coverage_before_duplicates(self) -> None:
         class Listing:
             def __init__(self, listing_id: str, brand: str, model: str) -> None:
@@ -67,6 +105,84 @@ class RetrievalParsingTests(unittest.TestCase):
         selected = select_diverse_listings(listings, 3)
 
         self.assertEqual([listing.listing_id for listing in selected], ["fit-1", "civic-1", "aqua-1"])
+
+
+class RetrievalEvalScoringTests(unittest.TestCase):
+    def test_risk_theme_matching_accepts_project_synonyms(self) -> None:
+        evidence = normalize_text(
+            "Buyers should compare trim level and newer trims. "
+            "A clean service record, documentation, and condition evidence matter. "
+            "Imported hatchback listings still need checks for body repair and paint."
+        )
+
+        self.assertTrue(risk_theme_matches("trim differences", evidence))
+        self.assertTrue(risk_theme_matches("feature variation by year", evidence))
+        self.assertTrue(risk_theme_matches("used condition", evidence))
+        self.assertTrue(risk_theme_matches("used import condition", evidence))
+        self.assertTrue(risk_theme_matches("parking damage", evidence))
+
+
+class RecommendationEvalScoringTests(unittest.TestCase):
+    def test_model_recall_is_capped_by_recommendation_limit(self) -> None:
+        self.assertEqual(capped_model_recall(hit_count=3, expected_count=6, recommendation_limit=3), 1.0)
+        self.assertEqual(capped_model_recall(hit_count=2, expected_count=3, recommendation_limit=3), 0.6667)
+
+
+class ProviderValidationTests(unittest.TestCase):
+    def test_provider_validation_skips_missing_api_key(self) -> None:
+        settings = self._settings()
+
+        result = validate_provider(
+            "openai",
+            RecommendRequest(query="I need a reliable car under $12,000 for commuting in Auckland."),
+            self._retrieval_response(),
+            settings,
+            include_missing=False,
+        )
+
+        self.assertEqual(result["provider"], "openai")
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "missing api key")
+
+    def test_provider_api_key_supports_alias_environment_mapping(self) -> None:
+        settings = self._settings(deepseek_api_key="shared-key", qwen_api_key="qwen-key", kimi_api_key="kimi-key")
+
+        self.assertEqual(provider_api_key("deepseek", settings), "shared-key")
+        self.assertEqual(provider_api_key("qwen", settings), "qwen-key")
+        self.assertEqual(provider_api_key("kimi", settings), "kimi-key")
+
+    @staticmethod
+    def _settings(**overrides: object) -> Settings:
+        values = {
+            "database_url": "postgresql+psycopg://used_car:used_car@127.0.0.1:5432/used_car_copilot",
+            "seed_data_dir": Path("data/seed"),
+            "api_host": "0.0.0.0",
+            "api_port": 8000,
+            "embedding_provider": "local_hash",
+            "embedding_model": "local-hash-embedding-v1",
+            "recommendation_provider": "deterministic",
+            "recommendation_model": "deterministic_ranker_with_citations",
+            "openai_api_key": None,
+            "openai_base_url": "https://api.openai.com/v1",
+            "openai_timeout_seconds": 30.0,
+            "deepseek_api_key": None,
+            "deepseek_base_url": "https://api.deepseek.com",
+            "qwen_api_key": None,
+            "qwen_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+            "kimi_api_key": None,
+            "kimi_base_url": "https://api.moonshot.ai/v1",
+        }
+        values.update(overrides)
+        return Settings(**values)
+
+    @staticmethod
+    def _retrieval_response() -> dict[str, object]:
+        return {
+            "applied_filters": {"max_price": 12000, "location": "Auckland", "limit": 20},
+            "listings": [],
+            "chunks": [],
+            "debug": {},
+        }
 
 
 class RecommendationRegressionTests(unittest.TestCase):

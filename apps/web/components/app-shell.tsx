@@ -7,11 +7,11 @@ import type { ReactNode } from "react";
 import { BarChart3, CarFront, Files, Gauge, LayoutDashboard, Settings2 } from "lucide-react";
 
 const navigation: Array<{ href: Route; label: string; icon: typeof LayoutDashboard }> = [
-  { href: "/", label: "Workbench", icon: LayoutDashboard },
-  { href: "/retrieve", label: "Retrieval", icon: Files },
-  { href: "/compare", label: "Compare", icon: CarFront },
-  { href: "/eval", label: "Eval", icon: BarChart3 },
-  { href: "/settings", label: "Providers", icon: Settings2 },
+  { href: "/admin", label: "Workbench", icon: LayoutDashboard },
+  { href: "/admin/retrieve", label: "Retrieval", icon: Files },
+  { href: "/admin/compare", label: "Compare", icon: CarFront },
+  { href: "/admin/eval", label: "Eval", icon: BarChart3 },
+  { href: "/admin/settings", label: "Providers", icon: Settings2 },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

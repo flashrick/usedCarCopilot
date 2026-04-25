@@ -66,13 +66,56 @@ The repository now contains planning documents, seed data, and a PostgreSQL-back
 
 The API uses SQLAlchemy ORM for runtime database access with PostgreSQL and pgvector. Raw SQL is kept in migration files.
 
-Start PostgreSQL with pgvector:
+For day-to-day development, use:
 
 ```bash
-docker compose up -d postgres
+./dev.sh
 ```
 
-Install API dependencies:
+This script:
+
+- starts `postgres` with Docker Compose
+- waits for the database to become ready
+- applies migrations
+- ingests seed data
+- builds local development embeddings
+- starts the FastAPI backend with `uvicorn --reload`
+- starts the Next.js frontend with `next dev`
+
+In this mode:
+
+- backend code changes under `apps/api/` hot-reload automatically
+- frontend code changes under `apps/web/` hot-reload automatically
+- `Ctrl-C` stops the local API and web processes, but leaves the `postgres` container running
+
+Hot reload does not replace setup tasks that change schema, seed data, generated embeddings, or dependencies. Run these manually when needed:
+
+- `python3 apps/api/scripts/migrate.py` after schema changes
+- `python3 apps/api/scripts/ingest_seed.py` after seed data changes
+- `python3 apps/api/scripts/build_embeddings.py` after embedding source changes
+- restart `./dev.sh` after dependency or virtual environment changes
+
+For a production-style local run without hot reload, start the full local stack:
+
+```bash
+docker compose up --build
+```
+
+This brings up:
+
+- PostgreSQL with pgvector on `127.0.0.1:5432`
+- FastAPI on `127.0.0.1:8000`
+- Next.js web app on `127.0.0.1:3000`
+
+On API startup, the container waits for PostgreSQL, applies migrations, ingests seed data, and generates local development embeddings automatically.
+
+Stop the stack with:
+
+```bash
+docker compose down
+```
+
+Optional manual API setup without Docker:
 
 ```bash
 python3 -m venv .venv
@@ -80,7 +123,13 @@ source .venv/bin/activate
 pip install -e apps/api
 ```
 
-Apply the schema:
+Start only PostgreSQL if you want to run the API manually:
+
+```bash
+docker compose up -d postgres
+```
+
+Then apply the schema:
 
 ```bash
 python3 apps/api/scripts/migrate.py
@@ -170,13 +219,19 @@ First endpoints:
 
 The frontend lives in `apps/web` as a Next.js decision workbench.
 
+For normal development, prefer `./dev.sh` from the repository root.
+
+For the production-style local setup, use the root `docker compose up --build` command above.
+
+Optional manual frontend setup:
+
 ```bash
 cd apps/web
 npm install
 npm run dev
 ```
 
-By default the browser uses Next.js `/api/*` proxy routes that forward to `http://127.0.0.1:8000`. Override the backend target with:
+By default the browser uses Next.js `/api/*` proxy routes that forward to `http://127.0.0.1:8000`. Inside Docker Compose the web container targets `http://api:8000` automatically. Override the manual backend target with:
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000

@@ -4,6 +4,16 @@ Next.js frontend for the Used Car Copilot decision workbench.
 
 ## Setup
 
+For the default local stack, start everything from the repository root:
+
+```bash
+docker compose up --build
+```
+
+This serves the web app on `http://127.0.0.1:3000` and connects it to the Compose API service automatically.
+
+Optional standalone frontend setup:
+
 From `apps/web`:
 
 ```bash
@@ -19,7 +29,7 @@ Set the backend target if needed:
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-Admin routes are protected with Basic Auth. Put the credentials in the repository root `.env`:
+Admin routes are protected with Basic Auth. In Docker Compose, defaults are `admin` / `change-me` unless overridden. For standalone local runs, put the credentials in the repository root `.env`:
 
 ```bash
 ADMIN_USERNAME=admin

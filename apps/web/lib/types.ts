@@ -49,10 +49,12 @@ export type RetrievedChunk = {
 export type RetrieveRequest = {
   query?: string;
   max_price?: number;
+  max_mileage?: number;
   brand?: string;
   brands?: string[];
   models?: string[];
   body_type?: string;
+  fuel_type?: string;
   location?: string;
   limit?: number;
 };

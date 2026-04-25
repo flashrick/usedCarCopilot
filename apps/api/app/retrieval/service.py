@@ -83,6 +83,12 @@ RUNNING_COST_TERMS = (
 )
 
 PREMIUM_TERMS = ("premium", "nicer", "upmarket", "comfortable")
+FUEL_PREFERENCE_TERMS = {
+    "hybrid": ("hybrid", "petrol hybrid", "gas hybrid"),
+    "petrol": ("petrol", "gasoline", "gas "),
+    "diesel": ("diesel",),
+    "electric": ("electric", "ev"),
+}
 
 
 def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
@@ -121,16 +127,31 @@ def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
         if price_match:
             max_price = int(price_match.group(1).replace(",", ""))
 
+    max_mileage = request.max_mileage
+    if max_mileage is None:
+        mileage_match = re.search(
+            r"(?:under|below|less than|max(?:imum)?(?: mileage)?(?: around)?|up to)\s+([0-9][0-9,]*)\s*(?:km|kms|kilomet(?:er|re)s?)",
+            query,
+        )
+        if mileage_match:
+            max_mileage = int(mileage_match.group(1).replace(",", ""))
+
+    fuel_type = normalize_fuel_preference(request.fuel_type)
+    if fuel_type is None:
+        fuel_type = infer_fuel_preference(query)
+
     context_filters = infer_context_filters(normalized_query)
 
     return {
         "query": request.query,
         "max_price": max_price,
+        "max_mileage": max_mileage,
         "brand": brand,
         "brands": requested_brands,
         "models": models,
         "body_type": body_type,
         "exclude_body_type": exclude_body_type,
+        "fuel_type": fuel_type,
         "location": request.location,
         "limit": request.limit,
         "prefer_hybrid": any(term in query for term in RUNNING_COST_TERMS),
@@ -253,6 +274,26 @@ def infer_context_filters(normalized_query: str) -> dict[str, Any]:
     return filters
 
 
+def normalize_fuel_preference(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = normalize_text(value)
+    if not normalized:
+        return None
+    for canonical, aliases in FUEL_PREFERENCE_TERMS.items():
+        if normalized == canonical or normalized in aliases:
+            return canonical
+    return normalized
+
+
+def infer_fuel_preference(query: str) -> str | None:
+    normalized_query = f" {normalize_text(query)} "
+    for canonical, aliases in FUEL_PREFERENCE_TERMS.items():
+        if any(f" {normalize_text(alias)} " in normalized_query for alias in aliases):
+            return canonical
+    return None
+
+
 def listing_order(filters: dict[str, Any]) -> list[Any]:
     order: list[Any] = []
     if filters["prefer_hybrid"]:
@@ -359,6 +400,8 @@ def listing_conditions(filters: dict[str, Any], include_price: bool = True) -> l
         conditions.append(ListingRecord.location == filters["location"])
     if include_price and filters["max_price"] is not None:
         conditions.append(and_(ListingRecord.price.is_not(None), ListingRecord.price <= filters["max_price"]))
+    if filters.get("max_mileage") is not None:
+        conditions.append(and_(ListingRecord.mileage.is_not(None), ListingRecord.mileage <= filters["max_mileage"]))
     if filters["brand"]:
         conditions.append(ListingRecord.brand == filters["brand"])
     elif filters["brands"]:
@@ -369,6 +412,8 @@ def listing_conditions(filters: dict[str, Any], include_price: bool = True) -> l
         conditions.append(ListingRecord.body_type != filters["exclude_body_type"])
     if filters.get("fuel_type") == "hybrid":
         conditions.append(ListingRecord.fuel_type.ilike("%hybrid%"))
+    elif filters.get("fuel_type"):
+        conditions.append(ListingRecord.fuel_type.ilike(f"%{filters['fuel_type']}%"))
 
     pairs = model_pairs(filters["models"])
     if pairs:

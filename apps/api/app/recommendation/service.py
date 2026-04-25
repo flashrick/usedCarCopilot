@@ -724,6 +724,10 @@ def find_relevant_chunks(listing: Any, chunks: list[Any]) -> list[Any]:
 def score_listing(listing: Any, filters: dict[str, Any], chunks: list[Any], risk_flags: list[dict[str, Any]]) -> int:
     score = 52
     price = value_of(listing, "price")
+    listing_brand = normalize(value_of(listing, "brand"))
+    listing_model = normalize(value_of(listing, "model"))
+    listing_body_type = normalize(value_of(listing, "body_type"))
+    listing_fuel_type = normalize(value_of(listing, "fuel_type"))
     max_price = filters.get("max_price")
     if price is None:
         score -= 10
@@ -746,6 +750,16 @@ def score_listing(listing: Any, filters: dict[str, Any], chunks: list[Any], risk
             score += 1
         else:
             score -= 8
+    max_mileage = filters.get("max_mileage")
+    if max_mileage is not None:
+        if mileage is None:
+            score -= 12
+        elif mileage <= max_mileage:
+            score += 9
+            if mileage <= max_mileage * 0.85:
+                score += 3
+        else:
+            score -= 15
 
     year = value_of(listing, "year")
     if year is not None:
@@ -756,24 +770,60 @@ def score_listing(listing: Any, filters: dict[str, Any], chunks: list[Any], risk
         elif year <= 2010:
             score -= 4
 
-    if filters.get("body_type") and normalize(value_of(listing, "body_type")) == normalize(filters["body_type"]):
+    if filters.get("body_type") and listing_body_type == normalize(filters["body_type"]):
         score += 5
-    if filters.get("brand") and normalize(value_of(listing, "brand")) == normalize(filters["brand"]):
+    if filters.get("brand") and listing_brand == normalize(filters["brand"]):
         score += 4
-    if filters.get("prefer_hybrid") and "hybrid" in normalize(value_of(listing, "fuel_type")):
+    if filters.get("fuel_type"):
+        if filters["fuel_type"] in listing_fuel_type:
+            score += 12
+        else:
+            score -= 14
+    if filters.get("prefer_hybrid") and "hybrid" in listing_fuel_type:
         score += 8
     if filters.get("prefer_premium") and year and year >= 2015:
         score += 5
+    usage = filters.get("usage")
+    priority = filters.get("priority")
+    if usage in {"commute", "daily_commute", "city", "short_city_trips", "daily_use"}:
+        if listing_body_type == "hatchback":
+            score += 6
+        elif listing_body_type == "suv":
+            score -= 2
+    if usage in {"family", "small_family_errands"}:
+        if listing_body_type == "suv":
+            score += 9
+        elif listing_body_type == "hatchback":
+            score -= 4
+        if (listing_brand, listing_model) == ("toyota", "prius"):
+            score += 4
+    if usage in {"highway", "rideshare"}:
+        if listing_body_type in {"sedan", "suv"}:
+            score += 6
+        elif listing_body_type == "hatchback":
+            score -= 2
+        if year is not None and year >= 2014:
+            score += 3
+    if priority in {"fuel_economy", "cheap_to_run", "efficiency", "low_running_cost", "city_driving"}:
+        if "hybrid" in listing_fuel_type:
+            score += 10
+        if listing_body_type == "hatchback":
+            score += 4
+    if priority in {"practicality", "space_practicality"}:
+        if listing_body_type == "suv":
+            score += 10
+        elif listing_body_type == "hatchback":
+            score -= 3
     if filters.get("priority") == "low_risk":
         preferred_low_risk_models = {
             ("toyota", "aqua"): 14,
             ("honda", "fit"): 18,
             ("mazda", "mazda3"): 12,
         }
-        listing_model = (normalize(value_of(listing, "brand")), normalize(value_of(listing, "model")))
-        if listing_model in preferred_low_risk_models:
-            score += preferred_low_risk_models[listing_model]
-        if normalize(value_of(listing, "body_type")) == "suv":
+        listing_model_key = (listing_brand, listing_model)
+        if listing_model_key in preferred_low_risk_models:
+            score += preferred_low_risk_models[listing_model_key]
+        if listing_body_type == "suv":
             score -= 8
         if price is not None and price > 20_000:
             score -= 5
@@ -952,6 +1002,10 @@ def build_query_summary(query: str | None, filters: dict[str, Any]) -> dict[str,
         preferences.append("Models: " + ", ".join(filters["models"]))
     if filters.get("prefer_hybrid"):
         preferences.append("Low running costs or hybrid preference")
+    if filters.get("fuel_type"):
+        preferences.append(f"Fuel: {filters['fuel_type']}")
+    if filters.get("max_mileage"):
+        preferences.append(f"Mileage under {format_km(filters['max_mileage'])}")
     if filters.get("prefer_premium"):
         preferences.append("More premium or comfortable feel")
 

@@ -16,6 +16,19 @@ Runtime database access uses SQLAlchemy ORM with the psycopg v3 PostgreSQL drive
 From the repository root:
 
 ```bash
+docker compose up --build
+```
+
+This starts PostgreSQL, the FastAPI service, and the Next.js frontend together. The API container automatically:
+
+- waits for PostgreSQL
+- applies migrations
+- loads seed data
+- builds local development embeddings
+
+For backend-only local work, you can still start just PostgreSQL:
+
+```bash
 docker compose up -d postgres
 ```
 
@@ -80,7 +93,7 @@ KIMI_API_KEY=...
 
 If external AI generation is enabled but unavailable, `/recommend` falls back to the deterministic generator and reports the fallback reason in response debug metadata.
 
-Run the API:
+Run the API manually:
 
 ```bash
 uvicorn app.main:app --app-dir apps/api --reload

@@ -88,6 +88,18 @@ class RetrievalParsingTests(unittest.TestCase):
         self.assertEqual(family_filters["household_size"], 3)
         self.assertEqual(family_filters["priority"], "practicality")
 
+    def test_infers_structured_fuel_and_mileage_preferences(self) -> None:
+        filters = infer_filters(
+            RetrieveRequest(
+                query="I want a hybrid under 100,000 km for Auckland commuting.",
+                max_mileage=95000,
+                fuel_type="hybrid",
+            )
+        )
+
+        self.assertEqual(filters["fuel_type"], "hybrid")
+        self.assertEqual(filters["max_mileage"], 95000)
+
     def test_select_diverse_listings_prefers_model_coverage_before_duplicates(self) -> None:
         class Listing:
             def __init__(self, listing_id: str, brand: str, model: str) -> None:
@@ -401,6 +413,44 @@ class RecommendationRegressionTests(unittest.TestCase):
             self.assertTrue(set(car["evidence_ids"]).issubset(evidence_ids))
             for flag in car["risk_flags"]:
                 self.assertTrue(set(flag["evidence_ids"]).issubset(evidence_ids))
+
+    def test_score_listing_respects_family_and_mileage_preferences(self) -> None:
+        family_filters = {
+            "max_price": 20000,
+            "max_mileage": 150000,
+            "body_type": None,
+            "brand": None,
+            "fuel_type": None,
+            "prefer_hybrid": False,
+            "prefer_premium": False,
+            "priority": "practicality",
+            "usage": "family",
+        }
+        suv_listing = {
+            "listing_id": "rav4-1",
+            "brand": "Toyota",
+            "model": "RAV4",
+            "body_type": "suv",
+            "fuel_type": "petrol",
+            "price": 18000,
+            "mileage": 120000,
+            "year": 2015,
+        }
+        hatch_listing = {
+            "listing_id": "fit-1",
+            "brand": "Honda",
+            "model": "Fit",
+            "body_type": "hatchback",
+            "fuel_type": "petrol",
+            "price": 18000,
+            "mileage": 120000,
+            "year": 2015,
+        }
+
+        suv_score = recommendation_service.score_listing(suv_listing, family_filters, [], [])
+        hatch_score = recommendation_service.score_listing(hatch_listing, family_filters, [], [])
+
+        self.assertGreater(suv_score, hatch_score)
 
     def _retrieval_response(self) -> dict[str, object]:
         return {

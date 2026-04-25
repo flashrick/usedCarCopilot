@@ -58,10 +58,12 @@ class RetrievedChunk(BaseModel):
 class RetrieveRequest(BaseModel):
     query: str | None = None
     max_price: int | None = None
+    max_mileage: int | None = None
     brand: str | None = None
     brands: list[str] = Field(default_factory=list)
     models: list[str] = Field(default_factory=list)
     body_type: str | None = None
+    fuel_type: str | None = None
     location: str | None = "Auckland"
     limit: int = Field(default=5, ge=1, le=20)
 

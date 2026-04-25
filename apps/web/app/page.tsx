@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -41,10 +41,10 @@ export default function BuyerSearchPage() {
   const [retrieval, setRetrieval] = useState<RetrieveResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
-    runSearch();
+    void runSearch({ scrollToResults: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -73,31 +73,38 @@ export default function BuyerSearchPage() {
     return [query, ...additions].join(" ");
   }
 
-  function runSearch() {
+  async function runSearch({ scrollToResults }: { scrollToResults: boolean }) {
     setError(null);
-    startTransition(async () => {
-      try {
-        const payload = {
-          query: buildPrompt(),
-          max_price: budget ? Number(budget) : undefined,
-          brand: brand || undefined,
-          body_type: bodyType || undefined,
-          location: location || undefined,
-          limit: 3,
-        };
+    setIsSearching(true);
+    try {
+      const payload = {
+        query: buildPrompt(),
+        max_price: budget ? Number(budget) : undefined,
+        max_mileage: mileage ? Number(mileage) : undefined,
+        brand: brand || undefined,
+        body_type: bodyType || undefined,
+        fuel_type: fuel || undefined,
+        location: location || undefined,
+        limit: 3,
+      };
 
-        const [recommendData, retrieveData] = await Promise.all([
-          fetchRecommend(payload),
-          fetchRetrieve({ ...payload, limit: 8 }),
-        ]);
+      const [recommendData, retrieveData] = await Promise.all([
+        fetchRecommend(payload),
+        fetchRetrieve({ ...payload, limit: 8 }),
+      ]);
 
-        setRecommendation(recommendData);
-        setRetrieval(retrieveData);
-        setSelectedId(recommendData.recommended_cars[0]?.listing_id ?? null);
-      } catch (caughtError) {
-        setError(caughtError instanceof Error ? caughtError.message : "Search failed. Check that the API is running.");
+      setRecommendation(recommendData);
+      setRetrieval(retrieveData);
+      setSelectedId(recommendData.recommended_cars[0]?.listing_id ?? null);
+
+      if (scrollToResults) {
+        document.getElementById("shortlist")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-    });
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Search failed. Check that the API is running.");
+    } finally {
+      setIsSearching(false);
+    }
   }
 
   return (
@@ -191,12 +198,12 @@ export default function BuyerSearchPage() {
 
               <button
                 type="button"
-                onClick={runSearch}
-                disabled={isPending}
+                onClick={() => void runSearch({ scrollToResults: true })}
+                disabled={isSearching}
                 className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded bg-[#007aff] px-5 text-sm font-semibold text-white transition hover:bg-[#238cff] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                {isPending ? "Searching..." : "Find my best options"}
+                {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                {isSearching ? "Searching..." : "Find my best options"}
               </button>
             </div>
 

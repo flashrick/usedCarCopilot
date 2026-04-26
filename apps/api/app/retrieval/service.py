@@ -123,7 +123,10 @@ def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
 
     max_price = request.max_price
     if max_price is None:
-        price_match = re.search(r"(?:under|budget(?:\s+is)?(?:\s+around)?|around)\s+\$?([0-9][0-9,]*)", query)
+        price_match = re.search(
+            r"(?:under|below|less than|up to|budget(?:\s+is)?(?:\s+around)?(?:\s+up to)?|around)\s+\$?([0-9][0-9,]*)",
+            query,
+        )
         if price_match:
             max_price = int(price_match.group(1).replace(",", ""))
 

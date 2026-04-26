@@ -100,6 +100,11 @@ class RetrievalParsingTests(unittest.TestCase):
         self.assertEqual(filters["fuel_type"], "hybrid")
         self.assertEqual(filters["max_mileage"], 95000)
 
+    def test_infers_budget_up_to_phrase_with_commas(self) -> None:
+        filters = infer_filters(RetrieveRequest(query="Budget up to $12,000 for an Auckland commuter."))
+
+        self.assertEqual(filters["max_price"], 12000)
+
     def test_select_diverse_listings_prefers_model_coverage_before_duplicates(self) -> None:
         class Listing:
             def __init__(self, listing_id: str, brand: str, model: str) -> None:

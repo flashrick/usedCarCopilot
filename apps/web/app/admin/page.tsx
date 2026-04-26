@@ -9,6 +9,7 @@ import { DebugPanel } from "@/components/workbench/debug-panel";
 import { ComparisonMatrix } from "@/components/workbench/comparison-matrix";
 import { RetrievalTable } from "@/components/workbench/retrieval-table";
 import { fetchRecommend, fetchRetrieve } from "@/lib/api";
+import { parseIntegerInput } from "@/lib/form";
 import type { RecommendResponse, RetrieveResponse } from "@/lib/types";
 
 const defaultQuery = "I need a reliable car under $12,000 for commuting in Auckland.";
@@ -34,9 +35,10 @@ export default function HomePage() {
     setError(null);
     startTransition(async () => {
       try {
+        const maxPrice = parseIntegerInput(budget);
         const payload = {
           query,
-          max_price: budget ? Number(budget) : undefined,
+          max_price: maxPrice,
           brand: brand || undefined,
           body_type: bodyType || undefined,
           location: location || undefined,
@@ -45,7 +47,7 @@ export default function HomePage() {
 
         const [recommendData, retrieveData] = await Promise.all([
           fetchRecommend(payload),
-          fetchRetrieve({ ...payload, limit: 8 }),
+          fetchRetrieve({ ...payload, limit: 20 }),
         ]);
 
         setRecommendation(recommendData);

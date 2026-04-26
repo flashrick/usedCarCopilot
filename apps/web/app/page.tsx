@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { fetchRecommend, fetchRetrieve } from "@/lib/api";
+import { formattedInteger, parseIntegerInput } from "@/lib/form";
 import type { Listing, RecommendResponse, RecommendedCar, RetrieveResponse, Severity } from "@/lib/types";
 
 const defaultQuery = "I need a reliable car under $12,000 for commuting in Auckland.";
@@ -62,13 +63,23 @@ export default function BuyerSearchPage() {
   const selectedListing = selectedCar ? listingById.get(selectedCar.listing_id) : null;
 
   function buildPrompt() {
+    const parsedBudget = parseIntegerInput(budget);
+    const parsedMileage = parseIntegerInput(mileage);
     const additions = [
-      budget ? `Budget up to $${budget}.` : null,
+      parsedBudget !== undefined
+        ? `Budget up to $${formattedInteger(parsedBudget)}.`
+        : budget.trim()
+          ? `Budget preference: ${budget.trim()}.`
+          : null,
       location ? `Location: ${location}.` : null,
       bodyType ? `Body type: ${bodyType}.` : null,
       brand ? `Preferred brand: ${brand}.` : null,
       fuel ? `Fuel preference: ${fuel}.` : null,
-      mileage ? `Mileage preference: under ${mileage} km.` : null,
+      parsedMileage !== undefined
+        ? `Mileage preference: under ${formattedInteger(parsedMileage)} km.`
+        : mileage.trim()
+          ? `Mileage preference: ${mileage.trim()}.`
+          : null,
     ].filter(Boolean);
     return [query, ...additions].join(" ");
   }
@@ -77,10 +88,12 @@ export default function BuyerSearchPage() {
     setError(null);
     setIsSearching(true);
     try {
+      const maxPrice = parseIntegerInput(budget);
+      const maxMileage = parseIntegerInput(mileage);
       const payload = {
         query: buildPrompt(),
-        max_price: budget ? Number(budget) : undefined,
-        max_mileage: mileage ? Number(mileage) : undefined,
+        max_price: maxPrice,
+        max_mileage: maxMileage,
         brand: brand || undefined,
         body_type: bodyType || undefined,
         fuel_type: fuel || undefined,
@@ -90,7 +103,7 @@ export default function BuyerSearchPage() {
 
       const [recommendData, retrieveData] = await Promise.all([
         fetchRecommend(payload),
-        fetchRetrieve({ ...payload, limit: 8 }),
+        fetchRetrieve({ ...payload, limit: 20 }),
       ]);
 
       setRecommendation(recommendData);

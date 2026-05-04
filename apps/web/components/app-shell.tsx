@@ -5,17 +5,19 @@ import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { BarChart3, CarFront, Files, Gauge, LayoutDashboard, Settings2 } from "lucide-react";
+import { useLocale } from "@/components/i18n/locale-provider";
 
-const navigation: Array<{ href: Route; label: string; icon: typeof LayoutDashboard }> = [
-  { href: "/admin", label: "Workbench", icon: LayoutDashboard },
-  { href: "/admin/retrieve", label: "Retrieval", icon: Files },
-  { href: "/admin/compare", label: "Compare", icon: CarFront },
-  { href: "/admin/eval", label: "Eval", icon: BarChart3 },
-  { href: "/admin/settings", label: "Providers", icon: Settings2 },
+const navigation: Array<{ href: Route; labelKey: keyof ReturnType<typeof useLocale>["copy"]["appShell"]["nav"]; icon: typeof LayoutDashboard }> = [
+  { href: "/admin", labelKey: "workbench", icon: LayoutDashboard },
+  { href: "/admin/retrieve", labelKey: "retrieval", icon: Files },
+  { href: "/admin/compare", labelKey: "compare", icon: CarFront },
+  { href: "/admin/eval", labelKey: "eval", icon: BarChart3 },
+  { href: "/admin/settings", labelKey: "providers", icon: Settings2 },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { copy } = useLocale();
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
@@ -26,13 +28,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Gauge className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-muted">Used Car</p>
-              <h1 className="text-lg font-semibold">Copilot</h1>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-muted">{copy.appShell.brandEyebrow}</p>
+              <h1 className="text-lg font-semibold">{copy.appShell.brandTitle}</h1>
             </div>
           </div>
 
           <nav className="grid grid-cols-2 gap-2 md:grid-cols-5 lg:grid-cols-1">
-            {navigation.map(({ href, label, icon: Icon }) => {
+            {navigation.map(({ href, labelKey, icon: Icon }) => {
               const active = pathname === href;
               return (
                 <Link
@@ -45,14 +47,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                   }`}
                 >
                   <Icon className="h-4 w-4" />
-                  <span>{label}</span>
+                  <span>{copy.appShell.nav[labelKey]}</span>
                 </Link>
               );
             })}
           </nav>
 
           <div className="mt-5 rounded-md bg-white/80 p-3 text-xs text-muted shadow-inset lg:mt-8">
-            Analyst-style workbench generated from the Stitch concept and wired to the FastAPI recommendation stack.
+            {copy.appShell.note}
           </div>
         </aside>
 

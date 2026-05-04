@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { QueryComposer } from "@/components/workbench/query-composer";
 import { RecommendationCard } from "@/components/workbench/recommendation-card";
 import { EvidencePanel } from "@/components/workbench/evidence-panel";
@@ -15,6 +16,7 @@ import type { RecommendResponse, RetrieveResponse } from "@/lib/types";
 const defaultQuery = "I need a reliable car under $12,000 for commuting in Auckland.";
 
 export default function HomePage() {
+  const { copy } = useLocale();
   const [query, setQuery] = useState(defaultQuery);
   const [budget, setBudget] = useState("12000");
   const [brand, setBrand] = useState("");
@@ -54,7 +56,7 @@ export default function HomePage() {
         setRetrieval(retrieveData);
         setSelectedListingId(recommendData.recommended_cars[0]?.listing_id ?? null);
       } catch (caughtError) {
-        setError(caughtError instanceof Error ? caughtError.message : "Unknown frontend error");
+        setError(caughtError instanceof Error ? caughtError.message : copy.adminWorkbench.defaultError);
       }
     });
   }
@@ -103,7 +105,7 @@ export default function HomePage() {
 
           <section className="grid gap-4">
             <EvidencePanel evidence={recommendation?.evidence ?? []} highlightedIds={selectedCar?.evidence_ids ?? []} />
-            <DebugPanel debug={recommendation?.debug ?? { state: "Run a query to inspect provider path." }} />
+            <DebugPanel debug={recommendation?.debug ?? { state: copy.adminWorkbench.emptyDebug }} />
           </section>
         </div>
 

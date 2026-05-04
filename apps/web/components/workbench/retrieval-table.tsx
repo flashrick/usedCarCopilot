@@ -1,24 +1,29 @@
 "use client";
 
+import { useLocale } from "@/components/i18n/locale-provider";
 import type { Listing } from "@/lib/types";
 import { formatMileage, formatMoney } from "@/lib/format";
+import { formatTemplate, translateValue } from "@/lib/i18n";
 
 export function RetrievalTable({ listings }: { listings: Listing[] }) {
+  const { copy, locale } = useLocale();
   return (
     <section className="rounded-md border border-line/70 bg-panel p-4 shadow-panel">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.22em] text-muted">Retrieval Explorer</div>
-          <h3 className="mt-1 text-lg font-semibold">Candidate listings in scope</h3>
+          <div className="text-[11px] uppercase tracking-[0.22em] text-muted">{copy.retrievalTable.eyebrow}</div>
+          <h3 className="mt-1 text-lg font-semibold">{copy.retrievalTable.title}</h3>
         </div>
-        <div className="rounded-md bg-shell px-3 py-2 text-xs text-muted">{listings.length} visible rows</div>
+        <div className="rounded-md bg-shell px-3 py-2 text-xs text-muted">
+          {formatTemplate(copy.retrievalTable.visibleRows, { count: listings.length })}
+        </div>
       </div>
 
       <div className="mt-4 overflow-x-auto">
         <table className="min-w-full text-left text-sm">
           <thead className="text-xs uppercase tracking-[0.18em] text-muted">
             <tr>
-              {["Vehicle", "Price", "Mileage", "Fuel", "Body", "Location"].map((heading) => (
+              {copy.retrievalTable.columns.map((heading) => (
                 <th key={heading} className="border-b border-line/70 px-3 py-3 font-medium">
                   {heading}
                 </th>
@@ -34,11 +39,11 @@ export function RetrievalTable({ listings }: { listings: Listing[] }) {
                     {listing.brand} {listing.model} {listing.year ? `· ${listing.year}` : ""}
                   </div>
                 </td>
-                <td className="px-3 py-3">{formatMoney(listing.price)}</td>
-                <td className="px-3 py-3">{formatMileage(listing.mileage)}</td>
-                <td className="px-3 py-3">{listing.fuel_type ?? "N/A"}</td>
-                <td className="px-3 py-3">{listing.body_type ?? "N/A"}</td>
-                <td className="px-3 py-3">{listing.location ?? "N/A"}</td>
+                <td className="px-3 py-3">{formatMoney(listing.price, locale)}</td>
+                <td className="px-3 py-3">{formatMileage(listing.mileage, locale)}</td>
+                <td className="px-3 py-3">{translateValue(listing.fuel_type, locale)}</td>
+                <td className="px-3 py-3">{translateValue(listing.body_type, locale)}</td>
+                <td className="px-3 py-3">{listing.location ?? copy.common.notAvailable}</td>
               </tr>
             ))}
           </tbody>

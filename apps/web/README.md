@@ -23,6 +23,8 @@ npm run dev
 
 The frontend proxies browser requests through Next.js `/api/*` rewrites.
 
+The UI supports English and Simplified Chinese. Users can switch languages from the floating toggle, and the preference is persisted in browser local storage.
+
 Set the backend target if needed:
 
 ```bash

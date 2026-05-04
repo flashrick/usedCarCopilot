@@ -1,0 +1,520 @@
+export type Locale = "en" | "zh-CN";
+
+export const defaultLocale: Locale = "en";
+export const localeStorageKey = "used-car-copilot-locale";
+
+export const localeOptions: Array<{ value: Locale; shortLabel: string; label: string }> = [
+  { value: "en", shortLabel: "EN", label: "English" },
+  { value: "zh-CN", shortLabel: "简中", label: "简体中文" },
+];
+
+const copy = {
+  en: {
+    languageToggle: {
+      label: "Language",
+    },
+    appShell: {
+      brandEyebrow: "Used Car",
+      brandTitle: "Copilot",
+      nav: {
+        workbench: "Workbench",
+        retrieval: "Retrieval",
+        compare: "Compare",
+        eval: "Eval",
+        providers: "Providers",
+      },
+      note: "Analyst-style workbench generated from the Stitch concept and wired to the FastAPI recommendation stack.",
+    },
+    home: {
+      badge: "Used Car Copilot",
+      title: "Tell the copilot what kind of used car you need",
+      description:
+        "Start in plain English. Describe your budget, driving habits, family needs, and ownership concerns, then inspect shortlist matches with risk flags and evidence.",
+      languageHint: "English prompts currently produce the most stable retrieval.",
+      cards: [
+        "Explain the real use case, not just the car type.",
+        "Get ranked matches instead of a long unfiltered listing dump.",
+        "Review why each option was recommended before you contact a seller.",
+      ],
+      panelTitle: "Start with a natural-language request",
+      panelDescription: "Mention budget, passengers, parking, reliability, fuel costs, and must-have features.",
+      textareaLabel: "Describe your ideal used car",
+      textareaPlaceholder:
+        "I need a reliable hatchback for weekday commuting, easy parking, and low running costs. Budget is around $14,000 and I want to avoid common maintenance headaches.",
+      examplePrompts: [
+        "I need a reliable hybrid for commuting in Auckland, easy to park, and cheap to run.",
+        "Find me a family SUV with a big boot, good safety reputation, and low maintenance risk.",
+        "I want a first car under $15,000 with solid fuel economy and no obvious ownership traps.",
+      ],
+      searchButton: "Search with AI",
+      workspaceButton: "Open search workspace",
+      highlights: [
+        {
+          title: "Hybrid Retrieval",
+          description: "Combines listing filters, knowledge grounding, and semantic matching to reduce low-quality suggestions.",
+        },
+        {
+          title: "Decision Transparency",
+          description: "Every recommendation includes evidence snippets, risk flags, and actionable next steps.",
+        },
+        {
+          title: "Buyer-Centric AI",
+          description: "The flow prioritizes real-world constraints such as budget, mileage, and local availability.",
+        },
+      ],
+      flowEyebrow: "Search Flow",
+      flowTitle: "From plain-English intent to a decision-ready shortlist",
+      flowDescription:
+        "The experience starts with one high-context prompt. The system then combines listing signals and grounded knowledge to explain what looks strong, what looks risky, and what deserves a closer inspection.",
+      flowSteps: [
+        "Describe your budget, driving habits, passenger needs, and concerns in one prompt.",
+        "Review a shortlist ranked for fit, not just listing order or keyword matches.",
+        "Inspect risk commentary, supporting evidence, and next-step checks before you buy.",
+      ],
+      ctaTitle: "Evidence-first recommendations, ready for your next inspection",
+      ctaPoints: [
+        "One strong prompt can carry budget, lifestyle, and ownership concerns together.",
+        "Citations and risk flags remain visible for each recommendation.",
+      ],
+      ctaButton: "Launch natural-language search",
+    },
+    findQuery: {
+      backHome: "Back to homepage",
+      title: "Search for a used car in plain English",
+      description:
+        "Describe the buyer context directly. Good prompts mention budget, passengers, road type, fuel concerns, reliability worries, and anything that would make you reject a car.",
+      languageHint: "English prompts currently produce the most stable retrieval.",
+      textareaLabel: "Natural-language request",
+      textareaPlaceholder: "Daily commute, easy parking, low running costs, and concerns I should check before buying.",
+      examplePrompts: [
+        "I need a reliable hybrid for commuting in Auckland, easy to park, and cheap to run.",
+        "Find me a family SUV with a big boot, good safety reputation, and low maintenance risk.",
+        "I want a first car under $15,000 with solid fuel economy and no obvious ownership traps.",
+      ],
+      emptyQueryError: "Describe what you need before running search.",
+      searchButton: "Find my best options",
+      searchingButton: "Searching...",
+      searchFailed: "Search failed. Check that the API is running.",
+    },
+    findSetup: {
+      backHome: "Back to homepage",
+      stepLabel: "STEP 1 OF 2",
+      title: "Set optional search parameters",
+      description: "Add up to 6 parameters to guide retrieval quality. You can leave everything blank and continue.",
+      budget: "Budget (NZD)",
+      location: "Location",
+      brand: "Brand",
+      bodyType: "Body Type",
+      fuelType: "Fuel Type",
+      maxMileage: "Max Mileage (km)",
+      numericHint: "Numeric fields are normalized using integer parsing rules before moving to the next step.",
+      continueButton: "Continue to natural language",
+      skipButton: "Skip for now",
+      anyOption: "Any {label}",
+    },
+    searchResults: {
+      shortlist: "Shortlist",
+      bestMatches: "Best matches",
+      decisionReport: "Decision report",
+      selectAResult: "Select a result",
+      emptyShortlist: "Run a search to generate your shortlist.",
+      emptyDecision: "The decision report will show price context, risks, next steps, and citations.",
+      evidenceEyebrow: "Evidence citations",
+      evidenceTitle: "What the recommendation engine used",
+      bestMatchBadge: "Best Match",
+      year: "Year",
+      location: "Location",
+      fuel: "Fuel",
+      riskFlags: "Risk flags",
+      noMajorRisk: "No major risk flags surfaced for this search.",
+      nextSteps: "Next steps",
+      matchedCitations: "Matched citations",
+      openListing: "Open listing",
+      matchScore: "Match score",
+      tbc: "TBC",
+    },
+    adminWorkbench: {
+      defaultError: "Unknown frontend error",
+      emptyDebug: "Run a query to inspect provider path.",
+    },
+    queryComposer: {
+      eyebrow: "Decision Workbench",
+      title: "Shortlist candidates with evidence, risks, and retrieval context.",
+      helper: "Citation-forward analyst view",
+      need: "Need",
+      placeholder: "I need a reliable car under $12,000 for commuting in Auckland.",
+      budget: "Budget",
+      brand: "Brand",
+      body: "Body",
+      location: "Location",
+      running: "Running...",
+      recommend: "Recommend",
+      allLabel: "All {label}",
+    },
+    recommendationCard: {
+      eyebrow: "Recommendation",
+      match: "Match",
+      whyItMatches: "Why it matches",
+      riskFlags: "Risk flags",
+      nextSteps: "Next steps",
+      evidence: "Evidence",
+      linkedItems: "{count} linked items",
+      inspect: "Inspect",
+    },
+    evidencePanel: {
+      title: "Evidence ledger",
+      empty: "No evidence loaded yet.",
+    },
+    debugPanel: {
+      title: "Trust + debug",
+      note: "Fallback state, model routing, and retrieval scope surface here so the recommendation path is inspectable.",
+    },
+    comparisonMatrix: {
+      eyebrow: "Comparison",
+      title: "Selected vehicle matrix",
+      topShortlisted: "Top {count} shortlisted vehicles",
+      dimension: "Dimension",
+      rows: {
+        match: "Match",
+        why: "Why",
+        riskFlags: "Risk flags",
+        nextSteps: "Next steps",
+      },
+    },
+    retrievalTable: {
+      eyebrow: "Retrieval Explorer",
+      title: "Candidate listings in scope",
+      visibleRows: "{count} visible rows",
+      columns: ["Vehicle", "Price", "Mileage", "Fuel", "Body", "Location"],
+    },
+    retrievePage: {
+      eyebrow: "Retrieval Explorer",
+      title: "Inspect listings, knowledge sources, and semantic chunks.",
+      running: "Running...",
+      retrieve: "Retrieve",
+      defaultError: "Unknown retrieval error",
+    },
+    retrieveResults: {
+      empty: "Run retrieval to inspect listings, linked knowledge, and semantic chunks.",
+      listings: "Listings",
+      knowledge: "Knowledge",
+      semanticChunks: "Semantic chunks",
+    },
+    adminCompare: {
+      eyebrow: "Comparison View",
+      title: "Read trade-offs without leaving the shortlist.",
+      description:
+        "This view is fed by the same recommendation contract as the main workbench, but optimized for side-by-side decision-making.",
+      defaultError: "Unknown comparison error",
+    },
+    eval: {
+      retrievalTitle: "Retrieval Eval",
+      recommendationTitle: "Recommendation Eval",
+      weakestCases: "Weakest cases",
+    },
+    settings: {
+      providerEyebrow: "Provider Matrix",
+      providerTitle: "Recommendation provider options",
+      selectable: "Selectable",
+      runtimeEyebrow: "Runtime Notes",
+      runtimeNotes: [
+        "External provider failures fall back to deterministic recommendations. The backend surfaces fallback reason in `/recommend.debug`.",
+        "Embedding generation remains on `local_hash` by default, so retrieval stays reproducible even when the recommendation provider changes.",
+        "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000",
+      ],
+      providers: [
+        { name: "Deterministic", note: "Local fallback and default development path." },
+        { name: "OpenAI", note: "Responses API with Structured Outputs and local citation validation." },
+        { name: "DeepSeek", note: "OpenAI-compatible Chat Completions path with JSON-mode parsing." },
+        { name: "Qwen", note: "DashScope compatible-mode Chat Completions path." },
+        { name: "Kimi", note: "Moonshot OpenAI-compatible Chat Completions path." },
+      ],
+    },
+    common: {
+      notAvailable: "N/A",
+    },
+  },
+  "zh-CN": {
+    languageToggle: {
+      label: "语言",
+    },
+    appShell: {
+      brandEyebrow: "二手车",
+      brandTitle: "Copilot",
+      nav: {
+        workbench: "工作台",
+        retrieval: "检索",
+        compare: "对比",
+        eval: "评测",
+        providers: "模型",
+      },
+      note: "这个分析师风格工作台基于 Stitch 概念稿实现，并已接到 FastAPI 推荐后端。",
+    },
+    home: {
+      badge: "Used Car Copilot",
+      title: "直接告诉 Copilot 你想要什么样的二手车",
+      description: "从自然语言开始。输入预算、通勤习惯、家庭需求和持有顾虑，再查看带风险提示与证据的推荐结果。",
+      languageHint: "当前英文或中英混合描述的检索效果更稳定。",
+      cards: [
+        "描述真实使用场景，而不只是车型名字。",
+        "拿到按匹配度排序的结果，而不是一长串无差别车源。",
+        "联系卖家前，先看清系统为什么推荐它。",
+      ],
+      panelTitle: "从自然语言请求开始",
+      panelDescription: "尽量写清预算、乘坐人数、停车场景、可靠性、油耗成本和必须要有的配置。",
+      textareaLabel: "描述你理想中的二手车",
+      textareaPlaceholder: "我想找一台可靠的两厢车，平时上下班代步，停车方便、养车成本低。预算大约 14,000 美元，尽量避开常见维修坑。",
+      examplePrompts: [
+        "I need a reliable hybrid for commuting in Auckland, easy to park, and cheap to run.",
+        "Find me a family SUV with a big boot, good safety reputation, and low maintenance risk.",
+        "I want a first car under $15,000 with solid fuel economy and no obvious ownership traps.",
+      ],
+      searchButton: "用 AI 搜索",
+      workspaceButton: "打开搜索工作区",
+      highlights: [
+        {
+          title: "混合检索",
+          description: "结合车源条件、知识证据和语义匹配，减少低质量推荐。",
+        },
+        {
+          title: "决策透明",
+          description: "每条推荐都带证据片段、风险标记和下一步检查建议。",
+        },
+        {
+          title: "以买家为中心",
+          description: "优先考虑预算、里程、本地可得性等真实约束。",
+        },
+      ],
+      flowEyebrow: "搜索流程",
+      flowTitle: "从自然语言意图到可决策的候选清单",
+      flowDescription: "体验从一条高信息量的 prompt 开始。系统再结合车源信号和知识证据，说明哪里值得买、哪里有风险、哪里需要进一步核查。",
+      flowSteps: [
+        "用一条 prompt 说清预算、驾驶习惯、乘坐需求和顾虑。",
+        "查看按匹配度排序的候选清单，而不是只按关键词或发布时间排列。",
+        "在下决定前先检查风险说明、支撑证据和建议的下一步动作。",
+      ],
+      ctaTitle: "以证据为先的推荐，帮你更快进入线下看车",
+      ctaPoints: [
+        "一条高质量 prompt 就能同时带上预算、生活场景和持有顾虑。",
+        "每个推荐都保留引用证据和风险提示。",
+      ],
+      ctaButton: "进入自然语言搜索",
+    },
+    findQuery: {
+      backHome: "返回首页",
+      title: "用自然语言搜索二手车",
+      description: "直接描述买车场景。好的输入通常会包含预算、乘客人数、道路环境、油耗顾虑、可靠性担忧，以及任何让你直接放弃一台车的条件。",
+      languageHint: "当前英文或中英混合描述的检索效果更稳定。",
+      textareaLabel: "自然语言需求",
+      textareaPlaceholder: "主要通勤、停车方便、使用成本低，并希望知道买之前要重点检查哪些风险。",
+      examplePrompts: [
+        "I need a reliable hybrid for commuting in Auckland, easy to park, and cheap to run.",
+        "Find me a family SUV with a big boot, good safety reputation, and low maintenance risk.",
+        "I want a first car under $15,000 with solid fuel economy and no obvious ownership traps.",
+      ],
+      emptyQueryError: "请先描述你的需求，再开始搜索。",
+      searchButton: "帮我找最佳选项",
+      searchingButton: "搜索中...",
+      searchFailed: "搜索失败。请检查 API 是否已启动。",
+    },
+    findSetup: {
+      backHome: "返回首页",
+      stepLabel: "第 1 步 / 共 2 步",
+      title: "设置可选搜索参数",
+      description: "最多可添加 6 个参数来提高检索质量。也可以全部留空直接继续。",
+      budget: "预算（NZD）",
+      location: "地区",
+      brand: "品牌",
+      bodyType: "车身类型",
+      fuelType: "燃料类型",
+      maxMileage: "最大里程（km）",
+      numericHint: "进入下一步前，数字字段会按整数规则归一化。",
+      continueButton: "继续到自然语言输入",
+      skipButton: "先跳过",
+      anyOption: "不限{label}",
+    },
+    searchResults: {
+      shortlist: "候选清单",
+      bestMatches: "最佳匹配",
+      decisionReport: "决策报告",
+      selectAResult: "选择一个结果",
+      emptyShortlist: "先运行一次搜索，系统才会生成候选清单。",
+      emptyDecision: "这里会显示价格背景、风险说明、下一步动作和引用证据。",
+      evidenceEyebrow: "证据引用",
+      evidenceTitle: "推荐引擎使用了哪些证据",
+      bestMatchBadge: "最佳匹配",
+      year: "年份",
+      location: "地区",
+      fuel: "燃料",
+      riskFlags: "风险标记",
+      noMajorRisk: "本次搜索没有发现明显的大风险标记。",
+      nextSteps: "下一步建议",
+      matchedCitations: "匹配到的引用",
+      openListing: "打开车源",
+      matchScore: "匹配分",
+      tbc: "待补充",
+    },
+    adminWorkbench: {
+      defaultError: "前端发生未知错误",
+      emptyDebug: "先运行一次查询，再查看 provider 路径。",
+    },
+    queryComposer: {
+      eyebrow: "决策工作台",
+      title: "在证据、风险和检索上下文中筛出候选车。",
+      helper: "面向引用证据的分析师视图",
+      need: "需求",
+      placeholder: "I need a reliable car under $12,000 for commuting in Auckland.",
+      budget: "预算",
+      brand: "品牌",
+      body: "车身",
+      location: "地区",
+      running: "运行中...",
+      recommend: "生成推荐",
+      allLabel: "不限{label}",
+    },
+    recommendationCard: {
+      eyebrow: "推荐结果",
+      match: "匹配",
+      whyItMatches: "匹配原因",
+      riskFlags: "风险标记",
+      nextSteps: "下一步建议",
+      evidence: "证据",
+      linkedItems: "关联证据 {count} 条",
+      inspect: "查看详情",
+    },
+    evidencePanel: {
+      title: "证据台账",
+      empty: "还没有加载证据。",
+    },
+    debugPanel: {
+      title: "可信度 + 调试",
+      note: "这里会展示回退状态、模型路由和检索范围，便于检查推荐链路是否可信。",
+    },
+    comparisonMatrix: {
+      eyebrow: "对比",
+      title: "已选车辆矩阵",
+      topShortlisted: "当前候选前 {count} 台",
+      dimension: "维度",
+      rows: {
+        match: "匹配",
+        why: "原因",
+        riskFlags: "风险",
+        nextSteps: "下一步",
+      },
+    },
+    retrievalTable: {
+      eyebrow: "检索浏览器",
+      title: "当前范围内的候选车源",
+      visibleRows: "可见 {count} 行",
+      columns: ["车辆", "价格", "里程", "燃料", "车身", "地区"],
+    },
+    retrievePage: {
+      eyebrow: "检索浏览器",
+      title: "查看车源、知识来源和语义分块。",
+      running: "运行中...",
+      retrieve: "开始检索",
+      defaultError: "检索时发生未知错误",
+    },
+    retrieveResults: {
+      empty: "先运行一次检索，才能查看车源、关联知识和语义分块。",
+      listings: "车源",
+      knowledge: "知识",
+      semanticChunks: "语义分块",
+    },
+    adminCompare: {
+      eyebrow: "对比视图",
+      title: "不离开候选清单，也能直接看权衡。",
+      description: "这个视图使用和主工作台相同的推荐 contract，但专门为并排比较做了展示优化。",
+      defaultError: "对比时发生未知错误",
+    },
+    eval: {
+      retrievalTitle: "检索评测",
+      recommendationTitle: "推荐评测",
+      weakestCases: "最弱案例",
+    },
+    settings: {
+      providerEyebrow: "模型矩阵",
+      providerTitle: "推荐模型选项",
+      selectable: "可选",
+      runtimeEyebrow: "运行说明",
+      runtimeNotes: [
+        "当外部模型失败时，系统会回退到 deterministic 推荐；后端会在 `/recommend.debug` 中暴露回退原因。",
+        "默认仍使用 `local_hash` 生成 embedding，因此即使推荐模型切换，检索结果也保持可复现。",
+        "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000",
+      ],
+      providers: [
+        { name: "Deterministic", note: "本地回退路径，也是默认开发模式。" },
+        { name: "OpenAI", note: "使用 Responses API、Structured Outputs 和本地引用校验。" },
+        { name: "DeepSeek", note: "走 OpenAI 兼容的 Chat Completions + JSON 模式解析。" },
+        { name: "Qwen", note: "走 DashScope 兼容模式的 Chat Completions。" },
+        { name: "Kimi", note: "走 Moonshot 的 OpenAI 兼容 Chat Completions。" },
+      ],
+    },
+    common: {
+      notAvailable: "暂无",
+    },
+  },
+} as const;
+
+export type Copy = (typeof copy)["en"] | (typeof copy)["zh-CN"];
+
+export function getCopy(locale: Locale): Copy {
+  return copy[locale];
+}
+
+export function formatTemplate(template: string, values: Record<string, string | number>): string {
+  return Object.entries(values).reduce((result, [key, value]) => result.replace(`{${key}}`, String(value)), template);
+}
+
+const compactLabelTranslations: Record<Locale, Record<string, string>> = {
+  en: {
+    source_type: "Source Type",
+    source_title: "Source Title",
+    fallback_reason: "Fallback Reason",
+    provider_name: "Provider Name",
+    recommendation_model: "Recommendation Model",
+  },
+  "zh-CN": {
+    source_type: "来源类型",
+    source_title: "来源标题",
+    fallback_reason: "回退原因",
+    provider_name: "模型提供方",
+    recommendation_model: "推荐模型",
+  },
+};
+
+const valueTranslations: Record<Locale, Record<string, string>> = {
+  en: {
+    hatchback: "Hatchback",
+    sedan: "Sedan",
+    suv: "SUV",
+    petrol: "Petrol",
+    hybrid: "Hybrid",
+    automatic: "Automatic",
+    manual: "Manual",
+  },
+  "zh-CN": {
+    hatchback: "两厢车",
+    sedan: "轿车",
+    suv: "SUV",
+    petrol: "汽油",
+    hybrid: "混动",
+    automatic: "自动挡",
+    manual: "手动挡",
+  },
+};
+
+export function compactLabel(value: string, locale: Locale = defaultLocale): string {
+  return (
+    compactLabelTranslations[locale][value] ??
+    value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  );
+}
+
+export function translateValue(value: string | null | undefined, locale: Locale = defaultLocale): string {
+  if (value === null || value === undefined || value === "") {
+    return copy[locale].common.notAvailable;
+  }
+
+  return valueTranslations[locale][value.toLowerCase()] ?? value;
+}

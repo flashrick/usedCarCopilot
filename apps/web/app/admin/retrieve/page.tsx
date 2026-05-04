@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { fetchRetrieve } from "@/lib/api";
 import type { RetrieveResponse } from "@/lib/types";
 import { RetrieveResults } from "@/components/retrieve/retrieve-results";
 
 export default function RetrievePage() {
+  const { copy } = useLocale();
   const [query, setQuery] = useState("I want a hatchback that is cheap to run and easy to park in Auckland.");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +20,7 @@ export default function RetrievePage() {
         const response = await fetchRetrieve({ query, location: "Auckland", limit: 8 });
         setData(response);
       } catch (caughtError) {
-        setError(caughtError instanceof Error ? caughtError.message : "Unknown retrieval error");
+        setError(caughtError instanceof Error ? caughtError.message : copy.retrievePage.defaultError);
       }
     });
   }
@@ -27,8 +29,8 @@ export default function RetrievePage() {
     <div className="p-4 md:p-6 xl:p-8">
       <div className="grid gap-4">
         <section className="rounded-md border border-line/70 bg-panel p-4 shadow-panel">
-          <div className="text-[11px] uppercase tracking-[0.22em] text-muted">Retrieval Explorer</div>
-          <h2 className="mt-1 text-2xl font-semibold">Inspect listings, knowledge sources, and semantic chunks.</h2>
+          <div className="text-[11px] uppercase tracking-[0.22em] text-muted">{copy.retrievePage.eyebrow}</div>
+          <h2 className="mt-1 text-2xl font-semibold">{copy.retrievePage.title}</h2>
           <div className="mt-4 flex flex-col gap-3 lg:flex-row">
             <textarea
               value={query}
@@ -41,7 +43,7 @@ export default function RetrievePage() {
               className="h-11 rounded-md bg-gradient-to-b from-steel to-steelDeep px-4 text-sm font-medium text-white shadow-panel transition hover:brightness-105 disabled:opacity-70"
               disabled={isPending}
             >
-              {isPending ? "Running..." : "Retrieve"}
+              {isPending ? copy.retrievePage.running : copy.retrievePage.retrieve}
             </button>
           </div>
           {error ? <div className="mt-3 text-sm text-rose-700">{error}</div> : null}

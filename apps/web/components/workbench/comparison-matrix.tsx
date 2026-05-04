@@ -1,30 +1,35 @@
 "use client";
 
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatTemplate } from "@/lib/i18n";
 import type { RecommendedCar } from "@/lib/types";
 
-const rows = [
-  { label: "Match", field: "match_score" },
-  { label: "Why", field: "why_it_matches" },
-  { label: "Risk flags", field: "risk_flags" },
-  { label: "Next steps", field: "next_steps" },
-];
-
 export function ComparisonMatrix({ cars }: { cars: RecommendedCar[] }) {
+  const { copy } = useLocale();
+  const rows = [
+    { label: copy.comparisonMatrix.rows.match, field: "match_score" },
+    { label: copy.comparisonMatrix.rows.why, field: "why_it_matches" },
+    { label: copy.comparisonMatrix.rows.riskFlags, field: "risk_flags" },
+    { label: copy.comparisonMatrix.rows.nextSteps, field: "next_steps" },
+  ];
+
   return (
     <section className="rounded-md border border-line/70 bg-panel p-4 shadow-panel">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.22em] text-muted">Comparison</div>
-          <h3 className="mt-1 text-lg font-semibold">Selected vehicle matrix</h3>
+          <div className="text-[11px] uppercase tracking-[0.22em] text-muted">{copy.comparisonMatrix.eyebrow}</div>
+          <h3 className="mt-1 text-lg font-semibold">{copy.comparisonMatrix.title}</h3>
         </div>
-        <div className="rounded-md bg-shell px-3 py-2 text-xs text-muted">Top {cars.length} shortlisted vehicles</div>
+        <div className="rounded-md bg-shell px-3 py-2 text-xs text-muted">
+          {formatTemplate(copy.comparisonMatrix.topShortlisted, { count: cars.length })}
+        </div>
       </div>
 
       <div className="mt-4 overflow-x-auto">
         <table className="min-w-full border-separate border-spacing-0 text-sm">
           <thead>
             <tr>
-              <th className="w-40 rounded-l-md bg-shell px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-muted">Dimension</th>
+              <th className="w-40 rounded-l-md bg-shell px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-muted">{copy.comparisonMatrix.dimension}</th>
               {cars.map((car, index) => (
                 <th
                   key={car.listing_id}

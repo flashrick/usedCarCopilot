@@ -1,7 +1,9 @@
 "use client";
 
 import { BadgeAlert, ChevronRight, FileStack, ShieldAlert } from "lucide-react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { formatMoney, severityTone } from "@/lib/format";
+import { formatTemplate } from "@/lib/i18n";
 import type { RecommendedCar } from "@/lib/types";
 
 type RecommendationCardProps = {
@@ -11,6 +13,7 @@ type RecommendationCardProps = {
 };
 
 export function RecommendationCard({ car, selected, onSelect }: RecommendationCardProps) {
+  const { copy } = useLocale();
   return (
     <article
       className={`rounded-md border bg-panel p-4 shadow-panel transition ${
@@ -20,12 +23,12 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
       <div className="flex flex-col gap-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.22em] text-muted">Recommendation</p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-muted">{copy.recommendationCard.eyebrow}</p>
             <h3 className="mt-1 text-lg font-semibold tracking-tight">{car.title}</h3>
             <p className="mt-1 text-sm text-muted">{car.price_commentary}</p>
           </div>
           <div className="rounded-md bg-steelDeep px-3 py-2 text-right text-white shadow-inset">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/70">Match</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/70">{copy.recommendationCard.match}</div>
             <div className="text-xl font-semibold">{car.match_score}</div>
           </div>
         </div>
@@ -34,7 +37,7 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
           <div className="rounded-md bg-shell p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <ShieldAlert className="h-4 w-4 text-steelDeep" />
-              Why it matches
+              {copy.recommendationCard.whyItMatches}
             </div>
             <ul className="mt-2 space-y-2 text-sm text-ink/90">
               {car.why_it_matches.map((reason) => (
@@ -48,7 +51,7 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
           <div className="rounded-md bg-shell p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <BadgeAlert className="h-4 w-4 text-[#8e3134]" />
-              Risk flags
+              {copy.recommendationCard.riskFlags}
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               {car.risk_flags.map((flag) => (
@@ -69,7 +72,7 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
 
         <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
           <div className="rounded-md bg-shell p-3">
-            <div className="text-sm font-medium">Next steps</div>
+            <div className="text-sm font-medium">{copy.recommendationCard.nextSteps}</div>
             <div className="mt-2 flex flex-wrap gap-2">
               {car.next_steps.map((step) => (
                 <span key={`${car.listing_id}-${step}`} className="rounded-md bg-white px-3 py-2 text-xs text-muted">
@@ -81,10 +84,10 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
 
           <div className="flex items-end justify-between gap-3 rounded-md bg-shell p-3 lg:min-w-48 lg:flex-col lg:items-stretch">
             <div className="rounded-md bg-white px-3 py-2 text-sm">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted">Evidence</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted">{copy.recommendationCard.evidence}</div>
               <div className="mt-1 flex items-center gap-2 font-medium">
                 <FileStack className="h-4 w-4 text-steelDeep" />
-                {car.evidence_ids.length} linked items
+                {formatTemplate(copy.recommendationCard.linkedItems, { count: car.evidence_ids.length })}
               </div>
             </div>
             <button
@@ -92,7 +95,7 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
               onClick={() => onSelect?.(car.listing_id)}
               className="flex items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-steelDeep transition hover:border-steel/40 hover:bg-steelSoft/50"
             >
-              Inspect
+              {copy.recommendationCard.inspect}
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>

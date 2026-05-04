@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
+import { LanguageToggle } from "@/components/i18n/language-toggle";
+import { LocaleProvider } from "@/components/i18n/locale-provider";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -21,15 +23,18 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Used Car Copilot",
-  description: "AI-backed used-car search for Auckland buyers, with recommendations, evidence, and risk signals.",
+  title: "Used Car Copilot | 二手车 Copilot",
+  description: "AI-backed used-car search with English and Simplified Chinese interface support.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable} ${spaceGrotesk.variable}`}>
       <body className="font-[var(--font-plex-sans)]">
-        {children}
+        <LocaleProvider>
+          <LanguageToggle />
+          {children}
+        </LocaleProvider>
       </body>
     </html>
   );

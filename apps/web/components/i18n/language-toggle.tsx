@@ -1,0 +1,39 @@
+"use client";
+
+import { Languages } from "lucide-react";
+import { localeOptions } from "@/lib/i18n";
+import { useLocale } from "@/components/i18n/locale-provider";
+
+export function LanguageToggle() {
+  const { locale, copy, setLocale } = useLocale();
+
+  return (
+    <div className="fixed right-4 top-4 z-50 rounded-full border border-black/10 bg-white/92 px-2 py-2 shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur md:right-6 md:top-6">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+          <Languages className="h-4 w-4" />
+        </span>
+        <span className="text-xs font-semibold text-slate-600">{copy.languageToggle.label}</span>
+        <div className="flex items-center rounded-full bg-slate-100 p-1">
+          {localeOptions.map((option) => {
+            const active = option.value === locale;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setLocale(option.value)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  active ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900"
+                }`}
+                aria-pressed={active}
+                title={option.label}
+              >
+                {option.shortLabel}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

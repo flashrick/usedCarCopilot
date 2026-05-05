@@ -17,7 +17,7 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
   return (
     <article
       className={`rounded-md border bg-panel p-4 shadow-panel transition ${
-        selected ? "border-steel/40 ring-2 ring-steel/20" : "border-line/70"
+        selected ? "border-primary/35 ring-2 ring-primary/12" : "border-line/70"
       }`}
     >
       <div className="flex flex-col gap-4">
@@ -28,8 +28,8 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
             <p className="mt-1 text-sm text-muted">{car.valuation_summary}</p>
             <p className="mt-2 text-xs text-muted">{car.powertrain_summary}</p>
           </div>
-          <div className="rounded-md bg-steelDeep px-3 py-2 text-right text-white shadow-inset">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/70">{copy.recommendationCard.match}</div>
+          <div className="rounded-xl bg-primary px-3 py-2 text-right text-white shadow-soft">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/80">{copy.recommendationCard.match}</div>
             <div className="text-xl font-semibold">{car.match_score}</div>
           </div>
         </div>
@@ -37,7 +37,7 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
         <section className="grid gap-3 md:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-md bg-shell p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <ShieldAlert className="h-4 w-4 text-steelDeep" />
+              <ShieldAlert className="h-4 w-4 text-primaryDeep" />
               {copy.recommendationCard.whyItMatches}
             </div>
             <ul className="mt-2 space-y-2 text-sm text-ink/90">
@@ -51,7 +51,7 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
 
           <div className="rounded-md bg-shell p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <BadgeAlert className="h-4 w-4 text-[#8e3134]" />
+              <BadgeAlert className="h-4 w-4 text-riskHighInk" />
               {copy.recommendationCard.riskFlags}
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -87,14 +87,14 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
             <div className="rounded-md bg-white px-3 py-2 text-sm">
               <div className="text-[11px] uppercase tracking-[0.18em] text-muted">{copy.recommendationCard.evidence}</div>
               <div className="mt-1 flex items-center gap-2 font-medium">
-                <FileStack className="h-4 w-4 text-steelDeep" />
+                <FileStack className="h-4 w-4 text-primaryDeep" />
                 {formatTemplate(copy.recommendationCard.linkedItems, { count: car.evidence_ids.length })}
               </div>
             </div>
             <button
               type="button"
               onClick={() => onSelect?.(car.profile_id)}
-              className="flex items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-steelDeep transition hover:border-steel/40 hover:bg-steelSoft/50"
+              className="flex items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-primaryDeep transition hover:border-primary/30 hover:bg-primarySoft/40"
             >
               {copy.recommendationCard.inspect}
               <ChevronRight className="h-4 w-4" />

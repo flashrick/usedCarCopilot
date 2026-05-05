@@ -124,7 +124,7 @@ export default function HomePage() {
         />
 
         {error ? (
-          <div className="flex items-center gap-3 rounded-md border border-riskHigh/70 bg-[#fff1f1] px-4 py-3 text-sm text-rose-900">
+          <div className="status-danger">
             <AlertTriangle className="h-4 w-4" />
             {error}
           </div>
@@ -147,7 +147,7 @@ export default function HomePage() {
                     type="button"
                     onClick={requestAdvice}
                     disabled={isAdvising || selectedProfileIds.length < 2}
-                    className="flex h-11 items-center justify-center rounded-md bg-gradient-to-b from-steel to-steelDeep px-4 text-sm font-medium text-white shadow-panel transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="btn-primary h-11 rounded-md px-4"
                   >
                     {isAdvising ? copy.adminWorkbench.advising : copy.adminWorkbench.getAdvice}
                   </button>

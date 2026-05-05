@@ -41,15 +41,15 @@ export function QueryComposer(props: QueryComposerProps) {
   } = props;
 
   return (
-    <section className="rounded-md bg-gradient-to-r from-steelDeep via-steel to-[#557893] p-[1px] shadow-panel">
-      <div className="rounded-[5px] bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(246,248,250,0.98))] px-4 py-4">
+    <section className="surface-card overflow-hidden">
+      <div className="border-b border-line/70 bg-[linear-gradient(135deg,rgba(219,234,254,0.72),rgba(255,237,213,0.55))] px-4 py-4">
         <div className="flex flex-col gap-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.24em] text-muted">{copy.queryComposer.eyebrow}</p>
+              <p className="section-eyebrow">{copy.queryComposer.eyebrow}</p>
               <h2 className="mt-1 text-2xl font-semibold tracking-tight">{copy.queryComposer.title}</h2>
             </div>
-            <div className="hidden rounded-md bg-shell px-3 py-2 text-xs text-muted md:flex md:items-center md:gap-2">
+            <div className="hidden rounded-xl border border-line/70 bg-white/80 px-3 py-2 text-xs text-muted md:flex md:items-center md:gap-2">
               <SlidersHorizontal className="h-4 w-4" />
               {copy.queryComposer.helper}
             </div>
@@ -61,7 +61,7 @@ export function QueryComposer(props: QueryComposerProps) {
               <textarea
                 value={query}
                 onChange={(event) => onQueryChange(event.target.value)}
-                className="min-h-24 rounded-md border border-line bg-white px-3 py-3 text-sm outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+                className="theme-textarea min-h-24 px-3 py-3"
                 placeholder={copy.queryComposer.placeholder}
               />
             </label>
@@ -98,7 +98,7 @@ export function QueryComposer(props: QueryComposerProps) {
             <button
               type="button"
               onClick={onSubmit}
-              className="mt-[25px] flex h-11 items-center justify-center gap-2 rounded-md bg-gradient-to-b from-steel to-steelDeep px-4 text-sm font-medium text-white shadow-panel transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+              className="btn-primary mt-[25px] h-11 rounded-xl px-4"
               disabled={loading}
             >
               <Search className="h-4 w-4" />
@@ -129,7 +129,7 @@ function Field({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-11 rounded-md border border-line bg-white px-3 text-sm outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+        className="theme-input"
       />
     </label>
   );
@@ -154,7 +154,7 @@ function SelectField({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 rounded-md border border-line bg-white px-3 text-sm outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+        className="theme-select"
       >
         {options.map((option) => (
           <option key={option || "all"} value={option}>

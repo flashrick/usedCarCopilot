@@ -48,7 +48,7 @@ export function RetrievalTable({ profiles, selectedProfileIds = [], onToggleSele
                       type="checkbox"
                       checked={selectedSet.has(profile.profile_id)}
                       onChange={() => onToggleSelection?.(profile.profile_id)}
-                      className="h-4 w-4 rounded border-line text-steel focus:ring-steel/30"
+                      className="h-4 w-4 rounded border-line text-primary focus:ring-primary/30"
                     />
                   </td>
                 ) : null}

@@ -11,7 +11,7 @@ export function DebugPanel({ debug }: { debug: Record<string, unknown> }) {
   return (
     <section className="rounded-md border border-line/70 bg-panel p-4 shadow-panel">
       <div className="flex items-center gap-2">
-        <Cpu className="h-4 w-4 text-steelDeep" />
+        <Cpu className="h-4 w-4 text-primaryDeep" />
         <h3 className="text-sm font-semibold">{copy.debugPanel.title}</h3>
       </div>
 
@@ -24,8 +24,8 @@ export function DebugPanel({ debug }: { debug: Record<string, unknown> }) {
         ))}
       </div>
 
-      <div className="mt-3 flex items-center gap-2 rounded-md bg-steelSoft/45 px-3 py-2 text-xs text-muted">
-        <ShieldCheck className="h-4 w-4 text-steelDeep" />
+      <div className="mt-3 flex items-center gap-2 rounded-md bg-primarySoft/60 px-3 py-2 text-xs text-muted">
+        <ShieldCheck className="h-4 w-4 text-primaryDeep" />
         {copy.debugPanel.note}
       </div>
     </section>

@@ -119,7 +119,7 @@ export default function ComparePage() {
           <h2 className="mt-1 text-2xl font-semibold">{copy.adminCompare.title}</h2>
           <p className="mt-2 max-w-3xl text-sm text-muted">{copy.adminCompare.description}</p>
           {error ? (
-            <div className="mt-3 flex items-center gap-3 rounded-md border border-riskHigh/70 bg-[#fff1f1] px-4 py-3 text-sm text-rose-900">
+            <div className="status-danger mt-3">
               <AlertTriangle className="h-4 w-4" />
               {error}
             </div>
@@ -140,7 +140,7 @@ export default function ComparePage() {
                 type="button"
                 onClick={() => void requestAdvice()}
                 disabled={isAdvising || selectedProfileIds.length < 2}
-                className="flex h-11 items-center justify-center rounded-md bg-gradient-to-b from-steel to-steelDeep px-4 text-sm font-medium text-white shadow-panel transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+                className="btn-primary h-11 rounded-md px-4"
               >
                 {isAdvising ? copy.adminWorkbench.advising : copy.adminWorkbench.getAdvice}
               </button>

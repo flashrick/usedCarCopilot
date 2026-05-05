@@ -36,18 +36,18 @@ export default function RetrievePage() {
             <textarea
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="min-h-24 flex-1 rounded-md border border-line bg-shell px-3 py-3 text-sm outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+              className="theme-textarea min-h-24 flex-1 rounded-md px-3 py-3"
             />
             <button
               type="button"
               onClick={runRetrieve}
-              className="h-11 rounded-md bg-gradient-to-b from-steel to-steelDeep px-4 text-sm font-medium text-white shadow-panel transition hover:brightness-105 disabled:opacity-70"
+              className="btn-primary h-11 rounded-md px-4"
               disabled={isPending}
             >
               {isPending ? copy.retrievePage.running : copy.retrievePage.retrieve}
             </button>
           </div>
-          {error ? <div className="mt-3 text-sm text-rose-700">{error}</div> : null}
+          {error ? <div className="status-danger mt-3">{error}</div> : null}
         </section>
 
         <RetrieveResults data={data} />

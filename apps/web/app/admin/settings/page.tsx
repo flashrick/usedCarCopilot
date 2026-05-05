@@ -71,7 +71,7 @@ function ProviderBadge({ configured, configuredLabel, missingLabel }: { configur
   return (
     <div
       className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
-        configured ? "bg-[#edf7ef] text-[#1f6b38]" : "bg-[#fff4e8] text-[#8a5a1d]"
+        configured ? "bg-successSoft text-riskLowInk" : "bg-accentSoft text-accentDeep"
       }`}
     >
       {configured ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
@@ -194,7 +194,7 @@ export default function SettingsPage() {
               <select
                 value={form.recommendationProvider}
                 onChange={(event) => changeRecommendationProvider(event.target.value as AIProviderId)}
-                className="h-11 rounded-md border border-line bg-shell px-3 text-sm outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+                className="theme-select rounded-md bg-shell"
                 disabled={isBooting}
               >
                 {recommendationProviders.map((provider) => (
@@ -209,7 +209,7 @@ export default function SettingsPage() {
               <input
                 value={form.recommendationModel}
                 onChange={(event) => setForm((current) => ({ ...current, recommendationModel: event.target.value }))}
-                className="h-11 rounded-md border border-line bg-shell px-3 text-sm outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+                className="theme-input rounded-md bg-shell"
                 placeholder={selectedProvider.defaultModel}
                 disabled={isBooting}
               />
@@ -238,7 +238,7 @@ export default function SettingsPage() {
                   <article
                     key={provider.id}
                     className={`rounded-md border p-4 transition ${
-                      form.recommendationProvider === provider.id ? "border-steel/40 bg-[#f8fbfd]" : "border-line/70 bg-shell"
+                      form.recommendationProvider === provider.id ? "border-primary/30 bg-primarySoft/35" : "border-line/70 bg-shell"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -269,21 +269,21 @@ export default function SettingsPage() {
           </div>
 
           {loadError ? (
-            <div className="mt-4 flex items-center gap-3 rounded-md border border-riskHigh/70 bg-[#fff1f1] px-4 py-3 text-sm text-rose-900">
+            <div className="status-danger mt-4">
               <AlertTriangle className="h-4 w-4" />
               {loadError}
             </div>
           ) : null}
 
           {saveError ? (
-            <div className="mt-4 flex items-center gap-3 rounded-md border border-riskHigh/70 bg-[#fff1f1] px-4 py-3 text-sm text-rose-900">
+            <div className="status-danger mt-4">
               <AlertTriangle className="h-4 w-4" />
               {saveError}
             </div>
           ) : null}
 
           {saveSuccess ? (
-            <div className="mt-4 flex items-center gap-3 rounded-md border border-[#b8e0c2] bg-[#eff9f1] px-4 py-3 text-sm text-[#1f6b38]">
+            <div className="status-success mt-4">
               <CheckCircle2 className="h-4 w-4" />
               {saveSuccess}
             </div>
@@ -296,7 +296,7 @@ export default function SettingsPage() {
                   type="password"
                   value={selectedExternalProviderId ? form.providers[selectedExternalProviderId].apiKey ?? "" : ""}
                   onChange={(event) => selectedExternalProviderId && updateProviderField(selectedExternalProviderId, "apiKey", event.target.value)}
-                  className="h-11 rounded-md border border-line bg-shell px-3 text-sm outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+                  className="theme-input rounded-md bg-shell"
                   placeholder={copy.settings.apiKeyPlaceholder}
                   disabled={isBooting}
                 />
@@ -310,7 +310,7 @@ export default function SettingsPage() {
                 <input
                   value={selectedExternalProviderId ? form.providers[selectedExternalProviderId].baseUrl : ""}
                   onChange={(event) => selectedExternalProviderId && updateProviderField(selectedExternalProviderId, "baseUrl", event.target.value)}
-                  className="h-11 rounded-md border border-line bg-shell px-3 text-sm outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+                  className="theme-input rounded-md bg-shell"
                   disabled={isBooting}
                 />
               </SettingField>
@@ -321,7 +321,7 @@ export default function SettingsPage() {
                 <input
                   value={form.providers.openai.timeoutSeconds ?? ""}
                   onChange={(event) => updateProviderField("openai", "timeoutSeconds", event.target.value)}
-                  className="h-11 rounded-md border border-line bg-shell px-3 text-sm outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+                  className="theme-input rounded-md bg-shell"
                   inputMode="decimal"
                   disabled={isBooting}
                 />
@@ -347,7 +347,7 @@ export default function SettingsPage() {
                 type="button"
                 onClick={handleSave}
                 disabled={isBooting || isPending}
-                className="inline-flex h-11 items-center gap-2 rounded-md bg-gradient-to-b from-steel to-steelDeep px-4 text-sm font-medium text-white shadow-panel transition hover:brightness-105 disabled:opacity-70"
+                className="btn-primary h-11 rounded-md px-4"
               >
                 {isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : null}
                 {isPending ? copy.settings.savingButton : copy.settings.saveButton}

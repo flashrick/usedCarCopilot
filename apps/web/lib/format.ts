@@ -45,9 +45,9 @@ export function formatConsumption(value?: number | null): string {
 }
 
 export function severityTone(severity: Severity): string {
-  if (severity === "high") return "bg-riskHigh/70 text-rose-950";
-  if (severity === "medium") return "bg-riskMedium/80 text-amber-950";
-  return "bg-riskLow/90 text-orange-950";
+  if (severity === "high") return "bg-riskHigh text-riskHighInk";
+  if (severity === "medium") return "bg-riskMedium text-riskMediumInk";
+  return "bg-riskLow text-riskLowInk";
 }
 
 export function truncate(value: string, length = 140): string {

@@ -18,7 +18,7 @@ export function EvidencePanel({ evidence, highlightedIds = [] }: EvidencePanelPr
   return (
     <section className="rounded-md border border-line/70 bg-panel p-4 shadow-panel">
       <div className="flex items-center gap-2">
-        <Quote className="h-4 w-4 text-steelDeep" />
+        <Quote className="h-4 w-4 text-primaryDeep" />
         <h3 className="text-sm font-semibold">{copy.evidencePanel.title}</h3>
       </div>
       <div className="mt-3 space-y-3">
@@ -26,7 +26,7 @@ export function EvidencePanel({ evidence, highlightedIds = [] }: EvidencePanelPr
           <article
             key={item.id}
             className={`rounded-md border p-3 text-sm transition ${
-              highlightedSet.has(item.id) ? "border-steel/40 bg-steelSoft/35" : "border-line/60 bg-shell/60"
+              highlightedSet.has(item.id) ? "border-primary/30 bg-primarySoft/35" : "border-line/60 bg-shell/60"
             }`}
           >
             <div className="flex items-start justify-between gap-3">

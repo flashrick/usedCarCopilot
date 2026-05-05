@@ -22,13 +22,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <div className="mx-auto flex min-h-screen w-full max-w-[1720px] flex-col lg:flex-row">
-        <aside className="border-b border-line/70 bg-shell px-4 py-4 lg:w-64 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
+        <aside className="border-b border-line/70 bg-white/75 px-4 py-4 backdrop-blur lg:w-64 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
           <div className="flex items-center gap-3 pb-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gradient-to-b from-steel to-steelDeep text-white shadow-panel">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-white shadow-soft">
               <Gauge className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-muted">{copy.appShell.brandEyebrow}</p>
+              <p className="section-eyebrow">{copy.appShell.brandEyebrow}</p>
               <h1 className="text-lg font-semibold">{copy.appShell.brandTitle}</h1>
             </div>
           </div>
@@ -42,8 +42,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   href={href}
                   className={`flex items-center gap-3 rounded-md border px-3 py-3 text-sm transition ${
                     active
-                      ? "border-steel/30 bg-white text-steelDeep shadow-inset"
-                      : "border-transparent bg-transparent text-muted hover:border-line/70 hover:bg-white/70 hover:text-ink"
+                      ? "border-primary/20 bg-primarySoft/80 text-primaryDeep shadow-inset"
+                      : "border-transparent bg-transparent text-muted hover:border-line/70 hover:bg-white hover:text-ink"
                   }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -53,12 +53,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          <div className="mt-5 rounded-md bg-white/80 p-3 text-xs text-muted shadow-inset lg:mt-8">
+          <div className="mt-5 rounded-xl border border-line/70 bg-panel/90 p-3 text-xs text-muted shadow-inset lg:mt-8">
             {copy.appShell.note}
           </div>
         </aside>
 
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 bg-transparent">{children}</main>
       </div>
     </div>
   );

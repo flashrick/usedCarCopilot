@@ -28,27 +28,27 @@ export default function FindSetupPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0b1017] text-[#e6eef8]">
+    <main className="min-h-screen bg-canvas text-ink">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
         <div className="mb-6 flex items-center justify-between gap-3">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm text-[#9cb6d1] hover:text-white">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted transition hover:text-primaryDeep">
             <ChevronLeft className="h-4 w-4" />
             {copy.findSetup.backHome}
           </Link>
-          <span className="rounded border border-white/15 bg-white/5 px-3 py-1 text-xs tracking-[0.16em] text-[#b6cae0]">
+          <span className="badge-secondary">
             {copy.findSetup.stepLabel}
           </span>
         </div>
 
-        <section className="rounded-2xl border border-white/10 bg-[#131d29] p-5 md:p-8">
+        <section className="surface-card p-5 md:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="font-[var(--font-space-grotesk)] text-3xl font-semibold text-white">{copy.findSetup.title}</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-[#c5d3e2]">
+              <h1 className="font-[var(--font-space-grotesk)] text-3xl font-semibold text-textStrong">{copy.findSetup.title}</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-textBody">
                 {copy.findSetup.description}
               </p>
             </div>
-            <span className="inline-flex rounded bg-[#00a8ff]/15 p-2 text-[#9adfff]">
+            <span className="inline-flex rounded-xl bg-primarySoft p-2 text-primary">
               <SlidersHorizontal className="h-5 w-5" />
             </span>
           </div>
@@ -91,20 +91,20 @@ export default function FindSetupPage() {
             />
           </div>
 
-          <p className="mt-4 text-xs text-[#9cb6d1]">{copy.findSetup.numericHint}</p>
+          <p className="mt-4 text-xs text-secondaryDeep">{copy.findSetup.numericHint}</p>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={continueToQuery}
-              className="inline-flex h-11 items-center gap-2 rounded bg-[#00a8ff] px-5 text-sm font-semibold text-white transition hover:bg-[#2ab7ff]"
+              className="btn-primary h-11"
             >
               {copy.findSetup.continueButton}
               <ArrowRight className="h-4 w-4" />
             </button>
             <Link
               href="/find/query"
-              className="inline-flex h-11 items-center rounded border border-white/20 px-5 text-sm font-semibold text-[#d2dfed] transition hover:bg-white/10"
+              className="btn-secondary h-11"
             >
               {copy.findSetup.skipButton}
             </Link>
@@ -127,13 +127,13 @@ function InputField({
   placeholder: string;
 }) {
   return (
-    <label className="grid gap-2 text-sm text-[#c5d3e2]">
+    <label className="grid gap-2 text-sm text-textBody">
       {label}
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-11 rounded border border-white/15 bg-[#0d151f] px-3 text-white outline-none transition placeholder:text-[#7e91a5] focus:border-[#00a8ff] focus:ring-2 focus:ring-[#00a8ff]/25"
+        className="theme-input placeholder:text-mutedSoft"
       />
     </label>
   );
@@ -153,12 +153,12 @@ function SelectField({
   localeLabel: (value: string) => string;
 }) {
   return (
-    <label className="grid gap-2 text-sm text-[#c5d3e2]">
+    <label className="grid gap-2 text-sm text-textBody">
       {label}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 rounded border border-white/15 bg-[#0d151f] px-3 text-white outline-none transition focus:border-[#00a8ff] focus:ring-2 focus:ring-[#00a8ff]/25"
+        className="theme-select"
       >
         {options.map((option) => (
           <option key={option || "any"} value={option}>

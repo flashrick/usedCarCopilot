@@ -27,9 +27,9 @@ type SearchResultsProps = {
 };
 
 const severityStyles: Record<Severity, string> = {
-  low: "border-[#abd600]/40 bg-[#abd600]/10 text-[#d7ff4f]",
-  medium: "border-[#ffcc66]/40 bg-[#ffcc66]/10 text-[#ffd68a]",
-  high: "border-[#ff8f87]/40 bg-[#ff8f87]/10 text-[#ffb4ab]",
+  low: "border-riskLow/90 bg-riskLow text-riskLowInk",
+  medium: "border-riskMedium/90 bg-riskMedium text-riskMediumInk",
+  high: "border-riskHigh/90 bg-riskHigh text-riskHighInk",
 };
 
 export function SearchResults({
@@ -140,21 +140,21 @@ export function SearchResults({
             </>
           ) : null}
           {recommendation?.recommendation_overview ? (
-            <article className="rounded-lg border border-[#00a8ff]/30 bg-[linear-gradient(135deg,rgba(0,168,255,0.18),rgba(0,229,255,0.08))] p-4">
+            <article className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,rgba(219,234,254,0.95),rgba(207,250,254,0.62))] p-4 shadow-panel">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded bg-[#0d2233] px-2 py-1 text-xs font-semibold text-[#8fd7ff]">
+                <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
                   {copy.searchResults.overviewEyebrow}
                 </span>
-                <span className="rounded bg-[#ccff00] px-2 py-1 text-xs font-bold text-[#161e00]">
+                <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">
                   {copy.searchResults.bestMatchBadge}
                 </span>
               </div>
-              <div className="mt-3 text-sm font-semibold text-white">{copy.searchResults.overviewTitle}</div>
-              <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-white">
+              <div className="mt-3 text-sm font-semibold text-textStrong">{copy.searchResults.overviewTitle}</div>
+              <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-textStrong">
                 {recommendation.recommendation_overview.recommended_title}
               </h3>
-              <p className="mt-2 text-sm leading-7 text-[#d8e9f7]">{recommendation.recommendation_overview.summary}</p>
-              <div className="mt-4 inline-flex items-center rounded border border-white/10 bg-black/15 px-3 py-2 text-xs text-[#c6d6e4]">
+              <p className="mt-2 text-sm leading-7 text-textBody">{recommendation.recommendation_overview.summary}</p>
+              <div className="mt-4 inline-flex items-center rounded-full border border-line bg-white/80 px-3 py-2 text-xs text-muted">
                 {formatTemplate(copy.searchResults.overviewEvidenceCount, {
                   count: recommendation.recommendation_overview.evidence_ids.length,
                 })}
@@ -162,7 +162,7 @@ export function SearchResults({
             </article>
           ) : null}
           {showOverviewFallback ? (
-            <div className="rounded-lg border border-[#ffcc66]/40 bg-[#ffcc66]/10 p-4 text-sm text-[#ffd68a]">
+            <div className="status-warning">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{copy.searchResults.overviewFallbackNotice}</span>
@@ -170,7 +170,7 @@ export function SearchResults({
             </div>
           ) : null}
           {showOverviewUnavailable ? (
-            <div className="rounded-lg border border-[#ffcc66]/40 bg-[#ffcc66]/10 p-4 text-sm text-[#ffd68a]">
+            <div className="status-warning">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{copy.searchResults.overviewUnavailableNotice}</span>
@@ -179,30 +179,30 @@ export function SearchResults({
           ) : null}
           {recommendation?.recommended_profiles.length ? (
             recommendation.recommended_profiles.map((car, index) => (
-              <article key={car.profile_id} className="rounded-lg border border-white/10 bg-[#1a1c1f] p-4">
+              <article key={car.profile_id} className="surface-card p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded bg-[#007aff] px-2 py-1 text-xs font-bold text-white">#{index + 1}</span>
+                      <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">#{index + 1}</span>
                       {index === 0 ? (
-                        <span className="rounded bg-[#ccff00] px-2 py-1 text-xs font-bold text-[#161e00]">
+                        <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">
                           {copy.searchResults.bestMatchBadge}
                         </span>
                       ) : null}
                     </div>
-                    <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-white">{car.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-[#c1c6d7]">{car.valuation_summary}</p>
+                    <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-textStrong">{car.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-textBody">{car.valuation_summary}</p>
                   </div>
                   <ScoreGauge score={car.match_score} />
                 </div>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <div>
-                    <h4 className="font-semibold text-white">{copy.searchResults.matchReasons}</h4>
+                    <h4 className="font-semibold text-textStrong">{copy.searchResults.matchReasons}</h4>
                     <div className="mt-3 grid gap-2">
                       {car.why_it_matches.map((reason) => (
-                        <div key={reason} className="flex items-start gap-2 text-sm leading-6 text-[#c1c6d7]">
-                          <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-[#ccff00]" />
+                        <div key={reason} className="flex items-start gap-2 text-sm leading-6 text-textBody">
+                          <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-accent" />
                           <span>{reason}</span>
                         </div>
                       ))}
@@ -210,11 +210,11 @@ export function SearchResults({
                   </div>
 
                   <div>
-                    <h4 className="font-semibold text-white">{copy.recommendationCard.tradeOffs}</h4>
-                    <div className="mt-3 grid gap-2 text-sm leading-6 text-[#c1c6d7]">
+                    <h4 className="font-semibold text-textStrong">{copy.recommendationCard.tradeOffs}</h4>
+                    <div className="mt-3 grid gap-2 text-sm leading-6 text-textBody">
                       {car.trade_offs.map((tradeOff) => (
                         <div key={tradeOff} className="flex items-start gap-2">
-                          <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-[#00e5ff]" />
+                          <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-secondary" />
                           <span>{tradeOff}</span>
                         </div>
                       ))}
@@ -223,7 +223,7 @@ export function SearchResults({
                 </div>
 
                 <div className="mt-4">
-                  <h4 className="font-semibold text-white">{copy.searchResults.riskFlags}</h4>
+                  <h4 className="font-semibold text-textStrong">{copy.searchResults.riskFlags}</h4>
                   <div className="mt-3 grid gap-2">
                     {car.risk_flags.length ? (
                       car.risk_flags.map((flag) => (
@@ -233,7 +233,7 @@ export function SearchResults({
                         </div>
                       ))
                     ) : (
-                      <div className="rounded border border-[#abd600]/40 bg-[#abd600]/10 p-3 text-sm text-[#d7ff4f]">
+                      <div className="rounded border border-riskLow/90 bg-riskLow p-3 text-sm text-riskLowInk">
                         {copy.searchResults.noMajorRisk}
                       </div>
                     )}
@@ -247,11 +247,11 @@ export function SearchResults({
                 </div>
 
                 <div className="mt-5">
-                  <h4 className="font-semibold text-white">{copy.searchResults.nextSteps}</h4>
+                  <h4 className="font-semibold text-textStrong">{copy.searchResults.nextSteps}</h4>
                   <div className="mt-3 grid gap-2">
                     {car.next_steps.map((step) => (
-                      <div key={step} className="flex items-start gap-2 text-sm leading-6 text-[#c1c6d7]">
-                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-[#00e5ff]" />
+                      <div key={step} className="flex items-start gap-2 text-sm leading-6 text-textBody">
+                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-secondary" />
                         <span>{step}</span>
                       </div>
                     ))}
@@ -265,18 +265,18 @@ export function SearchResults({
         </aside>
       </section>
 
-      <section id="evidence" className="border-t border-white/10 bg-[#111317]">
+      <section id="evidence" className="border-t border-line/70 bg-white/55">
         <div className="mx-auto max-w-7xl py-8">
           <SectionTitle eyebrow={copy.searchResults.evidenceEyebrow} title={copy.searchResults.evidenceTitle} />
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {(recommendation?.evidence ?? []).map((item) => (
-              <article key={item.id} className="rounded-lg border border-white/10 bg-[#1e2023] p-4">
+              <article key={item.id} className="surface-card p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="rounded bg-[#00e5ff]/10 px-2 py-1 text-xs font-semibold text-[#bdf4ff]">{compactLabel(item.source_type, locale)}</span>
-                  <span className="font-mono text-xs text-[#8b90a0]">{item.id}</span>
+                  <span className="rounded-full bg-secondarySoft px-2.5 py-1 text-xs font-semibold text-secondaryDeep">{compactLabel(item.source_type, locale)}</span>
+                  <span className="font-mono text-xs text-mutedSoft">{item.id}</span>
                 </div>
-                <h3 className="mt-3 font-semibold text-white">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-[#c1c6d7]">{item.snippet}</p>
+                <h3 className="mt-3 font-semibold text-textStrong">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-textBody">{item.snippet}</p>
               </article>
             ))}
             {recommendation?.evidence.length ? null : <EmptyPanel text={copy.searchResults.emptyEvidence} />}
@@ -307,17 +307,17 @@ function SelectionToolbar({
   onRequestAdvice: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#1a1c1f] p-4">
+    <div className="surface-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-white">{formatTemplate(countLabel, { count })}</div>
-          <p className="mt-2 text-sm leading-6 text-[#c1c6d7]">{helper}</p>
+          <div className="text-sm font-semibold text-textStrong">{formatTemplate(countLabel, { count })}</div>
+          <p className="mt-2 text-sm leading-6 text-textBody">{helper}</p>
         </div>
         <button
           type="button"
           onClick={onRequestAdvice}
           disabled={disabled}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded bg-[#00a8ff] px-5 text-sm font-semibold text-white transition hover:bg-[#2ab7ff] disabled:cursor-not-allowed disabled:opacity-70"
+          className="btn-primary h-11"
         >
           {loading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : null}
           {loading ? buttonLoadingLabel : buttonLabel}
@@ -330,8 +330,8 @@ function SelectionToolbar({
 function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div>
-      <div className="text-sm font-semibold text-[#bdf4ff]">{eyebrow}</div>
-      <h2 className="mt-1 font-[var(--font-space-grotesk)] text-2xl font-semibold text-white">{title}</h2>
+      <div className="section-eyebrow">{eyebrow}</div>
+      <h2 className="mt-1 font-[var(--font-space-grotesk)] text-2xl font-semibold text-textStrong">{title}</h2>
     </div>
   );
 }
@@ -369,26 +369,26 @@ function ShortlistCard({
       onClick={onToggle}
       disabled={disabled}
       className={`w-full rounded-lg border p-4 text-left transition disabled:cursor-wait disabled:opacity-80 ${
-        selected ? "border-[#00e5ff] bg-[#1e2023]" : "border-white/10 bg-[#1a1c1f] hover:border-[#00e5ff]/50"
+        selected ? "border-secondary bg-secondarySoft/30 shadow-soft" : "border-line/80 bg-white hover:border-primary/35 hover:bg-primarySoft/20"
       }`}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded bg-[#007aff] px-2 py-1 text-xs font-bold text-white">#{rank}</span>
+            <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">#{rank}</span>
             <span
               className={`rounded px-2 py-1 text-xs font-bold ${
-                selected ? "bg-[#ccff00] text-[#161e00]" : "bg-white/8 text-[#d6e3f2]"
+                selected ? "bg-accent text-white" : "bg-shell text-muted"
               }`}
             >
               {selected ? selectedLabel : selectLabel}
             </span>
           </div>
-          <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-white">{listing.title}</h3>
-          <div className="mt-2 flex flex-wrap gap-3 text-sm text-[#c1c6d7]">
+          <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-textStrong">{listing.title}</h3>
+          <div className="mt-2 flex flex-wrap gap-3 text-sm text-textBody">
             {listing.estimated_price_min_nzd ? (
               <span className="inline-flex items-center gap-1">
-                <CircleDollarSign className="h-4 w-4 text-[#abd600]" />{" "}
+                <CircleDollarSign className="h-4 w-4 text-accent" />{" "}
                 {formatMoneyRange(listing.estimated_price_min_nzd, listing.estimated_price_max_nzd, locale, listing.market)}
               </span>
             ) : null}
@@ -409,40 +409,40 @@ function ShortlistCard({
 
 function PopularModelCard({ model, locale }: { model: PopularModel; locale: "en" | "zh-CN" }) {
   return (
-    <article className="rounded-lg border border-white/10 bg-[#1a1c1f] p-4">
+    <article className="surface-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded bg-[#ff7a00] px-2 py-1 text-xs font-bold text-white">#{model.popularity_rank}</span>
-            <span className="rounded bg-white/8 px-2 py-1 text-xs text-[#d6e3f2]">{marketLabel(model.market as Market, locale)}</span>
+            <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">#{model.popularity_rank}</span>
+            <span className="rounded-full bg-shell px-3 py-1 text-xs text-muted">{marketLabel(model.market as Market, locale)}</span>
           </div>
-          <h3 className="mt-3 font-[var(--font-space-grotesk)] text-lg font-semibold text-white">{model.display_name}</h3>
-          <p className="mt-2 text-sm text-[#9fb4c9]">
+          <h3 className="mt-3 font-[var(--font-space-grotesk)] text-lg font-semibold text-textStrong">{model.display_name}</h3>
+          <p className="mt-2 text-sm text-textBody">
             {model.year_start}-{model.year_end}
           </p>
         </div>
-        <div className="rounded-lg bg-[#ff7a00]/10 p-2 text-[#ffb066]">
+        <div className="rounded-lg bg-accentSoft p-2 text-accent">
           <Flame className="h-4 w-4" />
         </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
         {model.body_types.map((bodyType) => (
-          <span key={bodyType} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[#d6e3f2]">
+          <span key={bodyType} className="rounded-full border border-line bg-shell px-2 py-1 text-muted">
             {translateValue(bodyType, locale)}
           </span>
         ))}
         {model.fuel_types.map((fuelType) => (
-          <span key={fuelType} className="rounded-full border border-[#00e5ff]/20 bg-[#00e5ff]/10 px-2 py-1 text-[#bdf4ff]">
+          <span key={fuelType} className="rounded-full border border-secondary/20 bg-secondarySoft/75 px-2 py-1 text-secondaryDeep">
             {translateValue(fuelType, locale)}
           </span>
         ))}
       </div>
 
-      <div className="mt-4 grid gap-2 text-sm leading-6 text-[#c1c6d7]">
+      <div className="mt-4 grid gap-2 text-sm leading-6 text-textBody">
         {model.match_reasons.map((reason) => (
           <div key={reason} className="flex items-start gap-2">
-            <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-[#ffb066]" />
+            <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-accent" />
             <span>{reason}</span>
           </div>
         ))}
@@ -461,21 +461,21 @@ function MetaTile({
   value: string;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#111317] p-3">
-      <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[#8b90a0]">
+    <div className="rounded-lg border border-line/70 bg-shell/80 p-3">
+      <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-mutedSoft">
         <Icon className="h-4 w-4" />
         {label}
       </div>
-      <div className="mt-2 text-sm text-white">{value}</div>
+      <div className="mt-2 text-sm text-textStrong">{value}</div>
     </div>
   );
 }
 
 function ScoreGauge({ score }: { score: number }) {
   return (
-    <div className="rounded-full border border-[#00e5ff]/30 bg-[#00e5ff]/10 px-4 py-3 text-center">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-[#9ddfff]">Score</div>
-      <div className="mt-1 text-2xl font-semibold text-white">{score}</div>
+    <div className="rounded-full border border-secondary/20 bg-secondarySoft/75 px-4 py-3 text-center">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-secondaryDeep">Score</div>
+      <div className="mt-1 text-2xl font-semibold text-textStrong">{score}</div>
     </div>
   );
 }
@@ -498,26 +498,23 @@ function AdviceLoadingPanel({
   selectionCountLabel: string;
 }) {
   return (
-    <article className="rounded-2xl border border-[#00a8ff]/25 bg-[linear-gradient(135deg,rgba(0,168,255,0.2),rgba(9,17,27,0.96)_55%,rgba(138,230,106,0.14))] p-5">
+    <article className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,rgba(219,234,254,0.94),rgba(255,255,255,0.96)_55%,rgba(255,237,213,0.8))] p-5 shadow-panel">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-2xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#00e5ff]/25 bg-[#00e5ff]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#bdf4ff]">
+          <div className="badge-secondary">
             <Loader2 className="h-4 w-4 motion-safe:animate-spin" />
             {title}
           </div>
-          <p className="mt-3 text-sm leading-7 text-[#d8e9f7]">{description}</p>
+          <p className="mt-3 text-sm leading-7 text-textBody">{description}</p>
         </div>
-        <div className="rounded-full border border-[#8ae66a]/25 bg-[#8ae66a]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#d8ffcb]">
+        <div className="badge-accent">
           {selectionCountLabel}
         </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
         {selectedProfiles.map((profile) => (
-          <span
-            key={profile.id}
-            className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-medium text-[#e6eef8]"
-          >
+          <span key={profile.id} className="rounded-full border border-line bg-white px-3 py-1.5 text-xs font-medium text-muted">
             {profile.title}
           </span>
         ))}
@@ -525,12 +522,12 @@ function AdviceLoadingPanel({
 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         {[stageOne, stageTwo, stageThree].map((stage, index) => (
-          <div key={stage} className="rounded-xl border border-white/10 bg-black/15 p-4">
+          <div key={stage} className="rounded-xl border border-line/70 bg-white/75 p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a8ff]/18 text-sm font-semibold text-[#bdf4ff]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primarySoft text-sm font-semibold text-primaryDeep">
                 {index + 1}
               </div>
-              <div className="text-sm font-medium text-white">{stage}</div>
+              <div className="text-sm font-medium text-textStrong">{stage}</div>
             </div>
           </div>
         ))}
@@ -541,30 +538,30 @@ function AdviceLoadingPanel({
 
 function AdviceSkeletonCard() {
   return (
-    <article className="rounded-lg border border-white/10 bg-[#1a1c1f] p-4 motion-safe:animate-pulse">
+    <article className="surface-card p-4 motion-safe:animate-pulse">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <div className="h-6 w-10 rounded bg-white/10" />
-            <div className="h-6 w-24 rounded bg-[#ccff00]/20" />
+            <div className="h-6 w-10 rounded bg-shellDeep" />
+            <div className="h-6 w-24 rounded bg-accentSoft" />
           </div>
-          <div className="mt-3 h-7 w-3/4 rounded bg-white/10" />
-          <div className="mt-3 h-4 w-full rounded bg-white/10" />
-          <div className="mt-2 h-4 w-5/6 rounded bg-white/10" />
+          <div className="mt-3 h-7 w-3/4 rounded bg-shellDeep" />
+          <div className="mt-3 h-4 w-full rounded bg-shellDeep" />
+          <div className="mt-2 h-4 w-5/6 rounded bg-shellDeep" />
         </div>
-        <div className="h-16 w-16 rounded-full border border-[#00e5ff]/20 bg-[#00e5ff]/8" />
+        <div className="h-16 w-16 rounded-full border border-secondary/20 bg-secondarySoft/70" />
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <div className="h-20 rounded-lg border border-white/10 bg-[#111317]" />
-        <div className="h-20 rounded-lg border border-white/10 bg-[#111317]" />
-        <div className="h-20 rounded-lg border border-white/10 bg-[#111317]" />
+        <div className="h-20 rounded-lg border border-line/70 bg-shell/80" />
+        <div className="h-20 rounded-lg border border-line/70 bg-shell/80" />
+        <div className="h-20 rounded-lg border border-line/70 bg-shell/80" />
       </div>
 
       <div className="mt-5 grid gap-2">
-        <div className="h-4 w-full rounded bg-white/10" />
-        <div className="h-4 w-11/12 rounded bg-white/10" />
-        <div className="h-4 w-4/5 rounded bg-white/10" />
+        <div className="h-4 w-full rounded bg-shellDeep" />
+        <div className="h-4 w-11/12 rounded bg-shellDeep" />
+        <div className="h-4 w-4/5 rounded bg-shellDeep" />
       </div>
     </article>
   );
@@ -572,7 +569,7 @@ function AdviceSkeletonCard() {
 
 function EmptyPanel({ text }: { text: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-white/12 bg-[#151b22] p-5 text-sm leading-6 text-[#c1c6d7]">
+    <div className="rounded-lg border border-dashed border-line bg-white/70 p-5 text-sm leading-6 text-textBody">
       {text}
     </div>
   );

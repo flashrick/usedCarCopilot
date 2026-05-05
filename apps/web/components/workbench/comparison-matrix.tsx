@@ -74,7 +74,7 @@ export function ComparisonMatrix({ cars }: { cars: RecommendedProfile[] }) {
 
 function renderCell(car: RecommendedProfile, field: ComparisonField) {
   if (field === "match_score") {
-    return <div className="text-lg font-semibold text-steelDeep">{car.match_score}</div>;
+    return <div className="text-lg font-semibold text-primaryDeep">{car.match_score}</div>;
   }
 
   if (field === "risk_flags") {

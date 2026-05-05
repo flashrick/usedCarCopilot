@@ -38,47 +38,47 @@ export function HomeSearchHero() {
   return (
     <div className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-end">
       <div className="max-w-3xl">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#61dafb]/30 bg-[#61dafb]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[#bdefff]">
+        <div className="badge-secondary">
           <Sparkles className="h-4 w-4" />
           {copy.home.badge}
         </div>
-        <h1 className="mt-6 font-[var(--font-space-grotesk)] text-4xl font-bold leading-tight text-white md:text-6xl">
+        <h1 className="mt-6 font-[var(--font-space-grotesk)] text-4xl font-bold leading-tight text-textStrong md:text-6xl">
           {copy.home.title}
         </h1>
-        <p className="mt-5 max-w-2xl text-base leading-7 text-[#c5d3e2] md:text-lg">
+        <p className="mt-5 max-w-2xl text-base leading-7 text-textBody md:text-lg">
           {copy.home.description}
         </p>
-        <p className="mt-4 text-sm text-[#8fd7ff]">{copy.home.languageHint}</p>
-        <div className="mt-6 grid gap-3 text-sm text-[#d7e3ef] sm:grid-cols-3">
+        <p className="mt-4 text-sm text-secondaryDeep">{copy.home.languageHint}</p>
+        <div className="mt-6 grid gap-3 text-sm text-textBody sm:grid-cols-3">
           {copy.home.cards.map((card) => (
-            <div key={card} className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div key={card} className="rounded-2xl border border-line/80 bg-white/80 p-4 shadow-panel">
               {card}
             </div>
           ))}
         </div>
       </div>
 
-      <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(19,29,41,0.96),rgba(11,16,23,0.98))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-6">
+      <div className="surface-card-hero p-5 md:p-6">
         <form onSubmit={handleSubmit} className="grid gap-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-[#dce9f6]">{copy.home.panelTitle}</div>
-              <p className="mt-1 text-sm leading-6 text-[#9fb4c9]">
+              <div className="text-sm font-semibold text-textStrong">{copy.home.panelTitle}</div>
+              <p className="mt-1 text-sm leading-6 text-textBody">
                 {copy.home.panelDescription}
               </p>
             </div>
-            <span className="inline-flex rounded-2xl bg-[#00a8ff]/15 p-3 text-[#9adfff]">
+            <span className="inline-flex rounded-2xl bg-primarySoft p-3 text-primary">
               <MessageSquareText className="h-5 w-5" />
             </span>
           </div>
 
-          <label className="grid gap-2 text-sm text-[#c5d3e2]">
+          <label className="grid gap-2 text-sm text-textBody">
             {copy.home.textareaLabel}
             <textarea
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={copy.home.textareaPlaceholder}
-              className="min-h-40 resize-none rounded-2xl border border-white/15 bg-[#0d151f] px-4 py-4 text-white outline-none transition placeholder:text-[#7e91a5] focus:border-[#00a8ff] focus:ring-2 focus:ring-[#00a8ff]/25"
+              className="theme-textarea min-h-40 resize-none placeholder:text-mutedSoft"
             />
           </label>
 
@@ -90,7 +90,7 @@ export function HomeSearchHero() {
                 key={prompt}
                 type="button"
                 onClick={() => setQuery(prompt)}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-[#d6e3f2] transition hover:border-[#00a8ff]/40 hover:bg-[#00a8ff]/10"
+                className="chip-muted text-left"
               >
                 {prompt}
               </button>
@@ -101,14 +101,14 @@ export function HomeSearchHero() {
             <button
               type="submit"
               disabled={!query.trim()}
-              className="inline-flex h-12 items-center gap-2 rounded bg-[#00a8ff] px-5 text-sm font-semibold text-white transition hover:bg-[#2ab7ff] disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-primary h-12"
             >
               {copy.home.searchButton}
               <ArrowRight className="h-4 w-4" />
             </button>
             <Link
               href={`/find/query?market=${encodeURIComponent(market)}`}
-              className="inline-flex h-12 items-center rounded border border-white/20 px-5 text-sm font-semibold text-[#d6e3f2] transition hover:bg-white/10"
+              className="btn-secondary h-12"
             >
               {copy.home.workspaceButton}
             </Link>

@@ -15,12 +15,12 @@ export function MarketSelector({
   onChange: (market: Market) => void;
 }) {
   return (
-    <label className="grid gap-2 text-sm text-[#c5d3e2]">
-      <span className="inline-flex items-center gap-2 text-sm font-medium text-[#dce9f6]">
-        <MapPinned className="h-4 w-4 text-[#8fd7ff]" />
+    <label className="grid gap-2">
+      <span className="inline-flex items-center gap-2 text-sm font-medium text-textBody">
+        <MapPinned className="h-4 w-4 text-secondary" />
         {locale === "zh-CN" ? "地区" : "Region"}
       </span>
-      <div className="inline-flex rounded-2xl border border-white/10 bg-[#0d151f] p-1">
+      <div className="inline-flex rounded-2xl border border-line bg-shell p-1">
         {(["US", "CN"] as const).map((option) => {
           const active = option === market;
           return (
@@ -29,7 +29,7 @@ export function MarketSelector({
               type="button"
               onClick={() => onChange(option)}
               className={`rounded-xl px-4 py-2 text-sm transition ${
-                active ? "bg-[#00a8ff] text-white" : "text-[#b8c7d6] hover:bg-white/8"
+                active ? "bg-primary text-white shadow-soft" : "text-muted hover:bg-white hover:text-primaryDeep"
               }`}
             >
               {marketLabel(option, locale)}

@@ -117,31 +117,31 @@ export default function FindQueryPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0b1017] text-[#e6eef8]">
+    <main className="min-h-screen bg-canvas text-ink">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-wrap items-center gap-3">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm text-[#9cb6d1] hover:text-white">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted transition hover:text-primaryDeep">
             <ChevronLeft className="h-4 w-4" />
             {copy.findQuery.backHome}
           </Link>
         </div>
 
-        <section className="rounded-2xl border border-white/10 bg-[#131d29] p-5 md:p-6">
-          <h1 className="font-[var(--font-space-grotesk)] text-3xl font-semibold text-white">{copy.findQuery.title}</h1>
-          <p className="mt-3 text-sm leading-7 text-[#c5d3e2]">
+        <section className="surface-card p-5 md:p-6">
+          <h1 className="font-[var(--font-space-grotesk)] text-3xl font-semibold text-textStrong">{copy.findQuery.title}</h1>
+          <p className="mt-3 text-sm leading-7 text-textBody">
             {copy.findQuery.description}
           </p>
-          <p className="mt-3 text-sm text-[#8fd7ff]">{copy.findQuery.languageHint}</p>
+          <p className="mt-3 text-sm text-secondaryDeep">{copy.findQuery.languageHint}</p>
 
           <div className="mt-4 grid gap-3">
             <MarketSelector market={market} locale={locale} onChange={setMarket} />
-            <label className="grid gap-2 text-sm text-[#c5d3e2]">
+            <label className="grid gap-2 text-sm text-textBody">
               {copy.findQuery.textareaLabel}
               <textarea
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={copy.findQuery.textareaPlaceholder}
-                className="min-h-28 resize-none rounded border border-white/15 bg-[#0d151f] px-3 py-3 text-white outline-none transition placeholder:text-[#7e91a5] focus:border-[#00a8ff] focus:ring-2 focus:ring-[#00a8ff]/25"
+                className="theme-textarea min-h-28 resize-none px-3 py-3 placeholder:text-mutedSoft"
               />
             </label>
 
@@ -151,7 +151,7 @@ export default function FindQueryPage() {
                   key={prompt}
                   type="button"
                   onClick={() => setQuery(prompt)}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-[#d6e3f2] transition hover:border-[#00a8ff]/40 hover:bg-[#00a8ff]/10"
+                  className="chip-muted text-left"
                 >
                   {prompt}
                 </button>
@@ -162,7 +162,7 @@ export default function FindQueryPage() {
               type="button"
               onClick={() => void runSearch(query, market)}
               disabled={isSearching}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded bg-[#00a8ff] px-5 text-sm font-semibold text-white transition hover:bg-[#2ab7ff] disabled:cursor-not-allowed disabled:opacity-70"
+              className="btn-primary h-12"
             >
               {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               {isSearching ? copy.findQuery.searchingButton : copy.findQuery.searchButton}
@@ -170,7 +170,7 @@ export default function FindQueryPage() {
           </div>
 
           {error ? (
-            <div className="mt-4 flex items-start gap-3 rounded border border-[#ffb4ab]/40 bg-[#93000a]/30 p-3 text-sm text-[#ffdad6]">
+            <div className="status-danger mt-4">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>

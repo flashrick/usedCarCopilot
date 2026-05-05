@@ -1,4 +1,5 @@
 import type {
+  AdminReportsResponse,
   AdminSettingsResponse,
   AdminSettingsUpdate,
   RecommendRequest,
@@ -51,6 +52,10 @@ export async function fetchRetrieve(payload: RetrieveRequest): Promise<RetrieveR
 
 export async function fetchVehicleProfiles(limit = 24) {
   return apiRequest(`/vehicle-profiles?limit=${limit}`);
+}
+
+export async function fetchAdminReports(): Promise<AdminReportsResponse> {
+  return apiRequest<AdminReportsResponse>("/admin/reports");
 }
 
 export async function fetchAdminSettings(): Promise<AdminSettingsResponse> {

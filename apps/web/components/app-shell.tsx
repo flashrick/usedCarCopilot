@@ -11,6 +11,7 @@ const navigation: Array<{ href: Route; labelKey: keyof ReturnType<typeof useLoca
   { href: "/admin", labelKey: "workbench", icon: LayoutDashboard },
   { href: "/admin/retrieve", labelKey: "retrieval", icon: Files },
   { href: "/admin/compare", labelKey: "compare", icon: CarFront },
+  { href: "/admin/reports", labelKey: "reports", icon: BarChart3 },
   { href: "/admin/eval", labelKey: "eval", icon: BarChart3 },
   { href: "/admin/settings", labelKey: "providers", icon: Settings2 },
 ];
@@ -33,7 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <nav className="grid grid-cols-2 gap-2 md:grid-cols-5 lg:grid-cols-1">
+          <nav className="grid grid-cols-2 gap-2 md:grid-cols-6 lg:grid-cols-1">
             {navigation.map(({ href, labelKey, icon: Icon }) => {
               const active = pathname === href;
               return (

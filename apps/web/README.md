@@ -44,5 +44,6 @@ ADMIN_PASSWORD=change-me
 - `/admin` workbench with query composer, shortlist retrieval, second-stage recommendations, evidence, debug, and comparison
 - `/admin/retrieve` retrieval explorer
 - `/admin/compare` shortlist comparison flow backed by the same second-stage AI recommendation contract
+- `/admin/reports` operational reports for data coverage, retrieval health, AI advice logs, ingestion, and embeddings
 - `/admin/eval` eval report summary
 - `/admin/settings` provider overview

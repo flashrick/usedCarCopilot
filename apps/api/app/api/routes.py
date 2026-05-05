@@ -6,7 +6,8 @@ from sqlalchemy import select, text
 from app.ai_request_logs import log_ai_recommendation_request
 from app.db.connection import get_session
 from app.db.orm import KnowledgeSourceRecord, VehicleProfileRecord
-from app.models.schemas import KnowledgeSource, RecommendRequest, RecommendResponse, RetrieveRequest, RetrieveResponse, VehicleProfile
+from app.models.schemas import AdminReportsResponse, KnowledgeSource, RecommendRequest, RecommendResponse, RetrieveRequest, RetrieveResponse, VehicleProfile
+from app.reporting.service import build_admin_reports
 from app.recommendation.service import RecommendationRequestError, recommend
 from app.retrieval.service import retrieve
 
@@ -59,6 +60,11 @@ def list_knowledge(limit: int = 20) -> list[KnowledgeSourceRecord]:
                 .limit(limit)
             )
         )
+
+
+@router.get("/admin/reports", response_model=AdminReportsResponse)
+def admin_reports() -> dict:
+    return build_admin_reports()
 
 
 @router.post("/retrieve", response_model=RetrieveResponse)

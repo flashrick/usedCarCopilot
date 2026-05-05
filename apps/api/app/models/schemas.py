@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -178,3 +178,43 @@ class RecommendResponse(BaseModel):
     recommended_profiles: list[RecommendedProfile]
     evidence: list[RecommendationEvidence]
     debug: dict[str, Any]
+
+
+class ReportMetric(BaseModel):
+    label: str
+    value: str
+    helper: str | None = None
+    status: str | None = None
+
+
+class ReportBucket(BaseModel):
+    label: str
+    count: int
+    percentage: float | None = None
+
+
+class ReportRecentItem(BaseModel):
+    title: str
+    subtitle: str | None = None
+    value: str | None = None
+    status: str | None = None
+    timestamp: datetime | None = None
+
+
+class AdminReportsResponse(BaseModel):
+    generated_at: datetime
+    summary: list[ReportMetric]
+    retrieval_activity: list[ReportMetric]
+    ai_activity: list[ReportMetric]
+    ingestion_activity: list[ReportMetric]
+    profiles_by_market: list[ReportBucket]
+    profiles_by_body_type: list[ReportBucket]
+    profiles_by_fuel_type: list[ReportBucket]
+    profiles_by_price_band: list[ReportBucket]
+    knowledge_by_source_type: list[ReportBucket]
+    knowledge_by_evidence_level: list[ReportBucket]
+    retrieval_by_endpoint: list[ReportBucket]
+    ai_by_provider: list[ReportBucket]
+    recent_retrieval_requests: list[ReportRecentItem]
+    recent_ai_requests: list[ReportRecentItem]
+    recent_ingestion_runs: list[ReportRecentItem]

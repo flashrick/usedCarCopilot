@@ -214,3 +214,43 @@ export type AdminSettingsUpdate = {
     kimi: ProviderConnectionUpdate;
   };
 };
+
+export type ReportMetric = {
+  label: string;
+  value: string;
+  helper?: string | null;
+  status?: string | null;
+};
+
+export type ReportBucket = {
+  label: string;
+  count: number;
+  percentage?: number | null;
+};
+
+export type ReportRecentItem = {
+  title: string;
+  subtitle?: string | null;
+  value?: string | null;
+  status?: string | null;
+  timestamp?: string | null;
+};
+
+export type AdminReportsResponse = {
+  generated_at: string;
+  summary: ReportMetric[];
+  retrieval_activity: ReportMetric[];
+  ai_activity: ReportMetric[];
+  ingestion_activity: ReportMetric[];
+  profiles_by_market: ReportBucket[];
+  profiles_by_body_type: ReportBucket[];
+  profiles_by_fuel_type: ReportBucket[];
+  profiles_by_price_band: ReportBucket[];
+  knowledge_by_source_type: ReportBucket[];
+  knowledge_by_evidence_level: ReportBucket[];
+  retrieval_by_endpoint: ReportBucket[];
+  ai_by_provider: ReportBucket[];
+  recent_retrieval_requests: ReportRecentItem[];
+  recent_ai_requests: ReportRecentItem[];
+  recent_ingestion_runs: ReportRecentItem[];
+};

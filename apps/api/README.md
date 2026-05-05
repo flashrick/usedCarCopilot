@@ -131,8 +131,11 @@ cd apps/api
 - `GET /health`
 - `GET /vehicle-profiles`
 - `GET /knowledge`
+- `GET /admin/reports`
 - `POST /retrieve`
 - `POST /recommend`
+
+`GET /admin/reports` returns read-only operational aggregates for the admin UI, including vehicle-profile coverage, knowledge-source coverage, semantic embedding coverage, retrieval request health, AI recommendation log health, and recent ingestion activity.
 
 `POST /retrieve` uses structured vehicle-profile filters plus pgvector semantic retrieval over embedded knowledge chunks. The current embedding provider is `local_hash` with model `local-hash-embedding-v1`, a deterministic local provider intended for repeatable development before an external embedding provider is chosen.
 

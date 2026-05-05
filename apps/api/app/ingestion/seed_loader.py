@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,16 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def make_json_compatible(value: Any) -> Any:
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: make_json_compatible(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [make_json_compatible(item) for item in value]
+    return value
 
 
 def chunk_text(text: str, max_words: int = 180) -> list[str]:
@@ -103,7 +114,7 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
                         assumed_mileage_km=valuation["assumed_mileage_km"],
                         valuation_method=valuation["valuation_method"],
                         valuation_notes=valuation["valuation_notes"],
-                        raw_payload={**row, **valuation},
+                        raw_payload=make_json_compatible({**row, **valuation}),
                         updated_at=func.now(),
                     )
                 )
@@ -128,7 +139,7 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
                         text=row["text"],
                         evidence_level=row.get("evidence_level"),
                         ownership_stage=row.get("ownership_stage"),
-                        raw_payload=row,
+                        raw_payload=make_json_compatible(row),
                         updated_at=func.now(),
                     )
                 )
@@ -159,10 +170,10 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
                     EvalCaseRecord(
                         id=row["id"],
                         query=row["query"],
-                        expected_filters=row.get("expected_filters", {}),
+                        expected_filters=make_json_compatible(row.get("expected_filters", {})),
                         expected_candidate_models=row.get("expected_candidate_models", []),
                         expected_risk_themes=row.get("expected_risk_themes", []),
-                        raw_payload=row,
+                        raw_payload=make_json_compatible(row),
                         updated_at=func.now(),
                     )
                 )

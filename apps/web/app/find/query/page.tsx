@@ -88,6 +88,12 @@ export default function FindQueryPage() {
     });
   }
 
+  function scrollAdviceIntoView() {
+    window.requestAnimationFrame(() => {
+      document.getElementById("advice")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   async function requestAdvice() {
     const trimmedQuery = query.trim();
     if (!trimmedQuery) {
@@ -102,13 +108,14 @@ export default function FindQueryPage() {
     setError(null);
     setRecommendation(null);
     setIsAdvising(true);
-    document.getElementById("advice")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollAdviceIntoView();
     try {
       const recommendData = await fetchRecommend({
         query: trimmedQuery,
         selected_profile_ids: selectedProfileIds,
       });
       setRecommendation(recommendData);
+      scrollAdviceIntoView();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : copy.findQuery.adviceFailed);
     } finally {

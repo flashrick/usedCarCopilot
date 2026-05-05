@@ -9,13 +9,23 @@ import {
   Flame,
   Loader2,
   ShieldCheck,
+  Sparkles,
   Zap,
 } from "lucide-react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { formatConsumption, formatMoneyRange } from "@/lib/format";
 import { compactLabel, formatTemplate, translateValue } from "@/lib/i18n";
 import { marketLabel } from "@/lib/market";
-import type { Market, PopularModel, RecommendResponse, RetrieveResponse, Severity, VehicleProfile } from "@/lib/types";
+import type {
+  Market,
+  PopularModel,
+  RecommendationOverview,
+  RecommendedProfile,
+  RecommendResponse,
+  RetrieveResponse,
+  Severity,
+  VehicleProfile,
+} from "@/lib/types";
 
 type SearchResultsProps = {
   recommendation: RecommendResponse | null;
@@ -25,6 +35,8 @@ type SearchResultsProps = {
   onRequestAdvice: () => void;
   recommendationLoading?: boolean;
 };
+
+type LocaleCopy = ReturnType<typeof useLocale>["copy"];
 
 const severityStyles: Record<Severity, string> = {
   low: "border-riskLow/90 bg-riskLow text-riskLowInk",
@@ -43,6 +55,17 @@ export function SearchResults({
   const { copy, locale } = useLocale();
   const selectedSet = new Set(selectedProfileIds);
   const selectedProfiles = retrieval?.vehicle_profiles.filter((profile) => selectedSet.has(profile.profile_id)) ?? [];
+  const rankedRecommendedProfiles =
+    recommendation?.recommended_profiles.map((profile, index) => ({ profile, rank: index + 1 })) ?? [];
+  const spotlightRecommendation =
+    recommendation?.recommendation_overview
+      ? rankedRecommendedProfiles.find(({ profile }) => profile.profile_id === recommendation.recommendation_overview?.recommended_profile_id) ??
+        rankedRecommendedProfiles[0]
+      : rankedRecommendedProfiles[0];
+  const remainingRecommendations = rankedRecommendedProfiles.filter(
+    ({ profile }) => profile.profile_id !== spotlightRecommendation?.profile.profile_id,
+  );
+  const showAdviceSurface = Boolean(recommendationLoading || recommendation);
   const recommendationProvider =
     typeof recommendation?.debug?.recommendation_provider === "string" ? recommendation.debug.recommendation_provider : null;
   const generationSource = typeof recommendation?.debug?.generation_source === "string" ? recommendation.debug.generation_source : null;
@@ -67,7 +90,7 @@ export function SearchResults({
 
   return (
     <>
-      <section className="mx-auto max-w-7xl">
+      <section className="mx-auto w-full max-w-7xl min-w-0">
         <SectionTitle
           eyebrow={locale === "zh-CN" ? "热门车型" : "Popular Models"}
           title={locale === "zh-CN" ? "先看当前市场最相关的热门车型" : "Start with the most query-relevant popular models"}
@@ -81,44 +104,9 @@ export function SearchResults({
         </div>
       </section>
 
-      <section id="shortlist" className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[0.94fr_1.06fr]">
-        <div className="grid content-start gap-4">
-          <SectionTitle eyebrow={copy.searchResults.shortlist} title={copy.searchResults.bestMatches} />
-          <SelectionToolbar
-            count={selectedProfileIds.length}
-            countLabel={copy.searchResults.selectedCount}
-            helper={copy.searchResults.selectionHint}
-            buttonLabel={copy.searchResults.getAdvice}
-            buttonLoadingLabel={copy.searchResults.adviceLoading}
-            disabled={selectedProfileIds.length < 2 || Boolean(recommendationLoading)}
-            loading={recommendationLoading}
-            onRequestAdvice={onRequestAdvice}
-          />
-          {retrieval?.vehicle_profiles.length ? (
-            retrieval.vehicle_profiles.map((listing, index) => (
-              <ShortlistCard
-                key={listing.profile_id}
-                listing={listing}
-                rank={index + 1}
-                selected={selectedSet.has(listing.profile_id)}
-                disabled={Boolean(recommendationLoading)}
-                onToggle={() => onToggleSelection(listing.profile_id)}
-                locale={locale}
-                selectLabel={copy.searchResults.selectLabel}
-                selectedLabel={copy.searchResults.selectedBadge}
-                bodyLabel={copy.queryComposer.body}
-                fuelLabel={copy.searchResults.fuel}
-                yearLabel={copy.searchResults.year}
-                tbcLabel={copy.searchResults.tbc}
-              />
-            ))
-          ) : (
-            <EmptyPanel text={copy.searchResults.emptyShortlist} />
-          )}
-        </div>
-
-        <aside id="advice" className="grid content-start gap-4">
-          <SectionTitle eyebrow={copy.searchResults.aiAdvice} title={copy.searchResults.aiAdviceTitle} />
+      {showAdviceSurface ? (
+        <section id="advice" className="mx-auto grid w-full max-w-7xl min-w-0 scroll-mt-24 gap-4">
+          <SectionTitle eyebrow={copy.searchResults.finalDecisionEyebrow} title={copy.searchResults.finalDecisionTitle} />
           {recommendationLoading ? (
             <>
               <AdviceLoadingPanel
@@ -135,31 +123,19 @@ export function SearchResults({
                   count: selectedProfiles.length,
                 })}
               />
-              <AdviceSkeletonCard />
-              <AdviceSkeletonCard />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <AdviceSkeletonCard />
+                <AdviceSkeletonCard />
+              </div>
             </>
           ) : null}
-          {recommendation?.recommendation_overview ? (
-            <article className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,rgba(219,234,254,0.95),rgba(207,250,254,0.62))] p-4 shadow-panel">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
-                  {copy.searchResults.overviewEyebrow}
-                </span>
-                <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">
-                  {copy.searchResults.bestMatchBadge}
-                </span>
-              </div>
-              <div className="mt-3 text-sm font-semibold text-textStrong">{copy.searchResults.overviewTitle}</div>
-              <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-textStrong">
-                {recommendation.recommendation_overview.recommended_title}
-              </h3>
-              <p className="mt-2 text-sm leading-7 text-textBody">{recommendation.recommendation_overview.summary}</p>
-              <div className="mt-4 inline-flex items-center rounded-full border border-line bg-white/80 px-3 py-2 text-xs text-muted">
-                {formatTemplate(copy.searchResults.overviewEvidenceCount, {
-                  count: recommendation.recommendation_overview.evidence_ids.length,
-                })}
-              </div>
-            </article>
+          {recommendation && spotlightRecommendation ? (
+            <FinalDecisionSpotlight
+              overview={recommendation.recommendation_overview ?? null}
+              profile={spotlightRecommendation.profile}
+              rank={spotlightRecommendation.rank}
+              copy={copy}
+            />
           ) : null}
           {showOverviewFallback ? (
             <div className="status-warning">
@@ -177,105 +153,73 @@ export function SearchResults({
               </div>
             </div>
           ) : null}
-          {recommendation?.recommended_profiles.length ? (
-            recommendation.recommended_profiles.map((car, index) => (
-              <article key={car.profile_id} className="surface-card p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">#{index + 1}</span>
-                      {index === 0 ? (
-                        <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">
-                          {copy.searchResults.bestMatchBadge}
-                        </span>
-                      ) : null}
-                    </div>
-                    <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-textStrong">{car.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-textBody">{car.valuation_summary}</p>
-                  </div>
-                  <ScoreGauge score={car.match_score} />
-                </div>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div>
-                    <h4 className="font-semibold text-textStrong">{copy.searchResults.matchReasons}</h4>
-                    <div className="mt-3 grid gap-2">
-                      {car.why_it_matches.map((reason) => (
-                        <div key={reason} className="flex items-start gap-2 text-sm leading-6 text-textBody">
-                          <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-accent" />
-                          <span>{reason}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-semibold text-textStrong">{copy.recommendationCard.tradeOffs}</h4>
-                    <div className="mt-3 grid gap-2 text-sm leading-6 text-textBody">
-                      {car.trade_offs.map((tradeOff) => (
-                        <div key={tradeOff} className="flex items-start gap-2">
-                          <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-secondary" />
-                          <span>{tradeOff}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <h4 className="font-semibold text-textStrong">{copy.searchResults.riskFlags}</h4>
-                  <div className="mt-3 grid gap-2">
-                    {car.risk_flags.length ? (
-                      car.risk_flags.map((flag) => (
-                        <div key={`${flag.label}-${flag.reason}`} className={`rounded border p-3 text-sm ${severityStyles[flag.severity]}`}>
-                          <div className="font-semibold">{flag.label}</div>
-                          <div className="mt-1 leading-6">{flag.reason}</div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded border border-riskLow/90 bg-riskLow p-3 text-sm text-riskLowInk">
-                        {copy.searchResults.noMajorRisk}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  <MetaTile icon={CarFront} label={copy.searchResults.matchScore} value={String(car.match_score)} />
-                  <MetaTile icon={ShieldCheck} label={copy.searchResults.matchedCitations} value={String(car.evidence_ids.length)} />
-                  <MetaTile icon={ArrowRight} label={copy.searchResults.nextSteps} value={String(car.next_steps.length)} />
-                </div>
-
-                <div className="mt-5">
-                  <h4 className="font-semibold text-textStrong">{copy.searchResults.nextSteps}</h4>
-                  <div className="mt-3 grid gap-2">
-                    {car.next_steps.map((step) => (
-                      <div key={step} className="flex items-start gap-2 text-sm leading-6 text-textBody">
-                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-secondary" />
-                        <span>{step}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            ))
-          ) : recommendationLoading ? null : (
+          {remainingRecommendations.length ? (
+            <div className={`grid gap-4 ${remainingRecommendations.length > 1 ? "lg:grid-cols-2" : ""}`}>
+              {remainingRecommendations.map(({ profile, rank }) => (
+                <RecommendationProfileCard key={profile.profile_id} car={profile} rank={rank} copy={copy} />
+              ))}
+            </div>
+          ) : recommendationLoading || spotlightRecommendation ? null : (
             <EmptyPanel text={copy.searchResults.emptyAdvice} />
           )}
-        </aside>
+        </section>
+      ) : null}
+
+      <section id="shortlist" className="mx-auto grid w-full max-w-7xl min-w-0 scroll-mt-24 gap-4">
+        <SectionTitle eyebrow={copy.searchResults.shortlist} title={copy.searchResults.bestMatches} />
+        <SelectionToolbar
+          count={selectedProfileIds.length}
+          countLabel={copy.searchResults.selectedCount}
+          helper={copy.searchResults.selectionHint}
+          buttonLabel={copy.searchResults.getAdvice}
+          buttonLoadingLabel={copy.searchResults.adviceLoading}
+          disabled={selectedProfileIds.length < 2 || Boolean(recommendationLoading)}
+          loading={recommendationLoading}
+          onRequestAdvice={onRequestAdvice}
+        />
+        {showAdviceSurface && selectedProfiles.length ? (
+          <SelectedProfilesStrip
+            title={copy.searchResults.selectedSummaryTitle}
+            description={copy.searchResults.selectedSummaryDescription}
+            profiles={selectedProfiles}
+            locale={locale}
+          />
+        ) : null}
+        {retrieval?.vehicle_profiles.length ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {retrieval.vehicle_profiles.map((listing, index) => (
+              <ShortlistCard
+                key={listing.profile_id}
+                listing={listing}
+                rank={index + 1}
+                selected={selectedSet.has(listing.profile_id)}
+                disabled={Boolean(recommendationLoading)}
+                onToggle={() => onToggleSelection(listing.profile_id)}
+                locale={locale}
+                selectLabel={copy.searchResults.selectLabel}
+                selectedLabel={copy.searchResults.selectedBadge}
+                bodyLabel={copy.queryComposer.body}
+                fuelLabel={copy.searchResults.fuel}
+                yearLabel={copy.searchResults.year}
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyPanel text={copy.searchResults.emptyShortlist} />
+        )}
       </section>
 
       <section id="evidence" className="border-t border-line/70 bg-white/55">
-        <div className="mx-auto max-w-7xl py-8">
+        <div className="mx-auto w-full max-w-7xl min-w-0 py-8">
           <SectionTitle eyebrow={copy.searchResults.evidenceEyebrow} title={copy.searchResults.evidenceTitle} />
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {(recommendation?.evidence ?? []).map((item) => (
-              <article key={item.id} className="surface-card p-4">
+              <article key={item.id} className="surface-card min-w-0 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <span className="rounded-full bg-secondarySoft px-2.5 py-1 text-xs font-semibold text-secondaryDeep">{compactLabel(item.source_type, locale)}</span>
                   <span className="font-mono text-xs text-mutedSoft">{item.id}</span>
                 </div>
-                <h3 className="mt-3 font-semibold text-textStrong">{item.title}</h3>
+                <h3 className="mt-3 break-words font-semibold text-textStrong">{item.title}</h3>
                 <p className="mt-2 text-sm leading-6 text-textBody">{item.snippet}</p>
               </article>
             ))}
@@ -327,11 +271,211 @@ function SelectionToolbar({
   );
 }
 
+function FinalDecisionSpotlight({
+  overview,
+  profile,
+  rank,
+  copy,
+}: {
+  overview: RecommendationOverview | null;
+  profile: RecommendedProfile;
+  rank: number;
+  copy: LocaleCopy;
+}) {
+  return (
+    <article className="min-w-0 rounded-2xl border border-primary/20 bg-[linear-gradient(135deg,rgba(219,234,254,0.98),rgba(255,255,255,0.98)_48%,rgba(255,237,213,0.9))] p-5 shadow-panel md:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-4xl">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
+              <Sparkles className="h-3.5 w-3.5" />
+              {copy.searchResults.overviewEyebrow}
+            </span>
+            <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">{copy.searchResults.bestMatchBadge}</span>
+            <span className="rounded-full border border-line bg-white/85 px-3 py-1 text-xs font-semibold text-muted">#{rank}</span>
+          </div>
+          <div className="mt-4 text-sm font-semibold text-textStrong">
+            {overview ? copy.searchResults.overviewTitle : copy.searchResults.finalRecommendationTitle}
+          </div>
+          <h3 className="mt-3 break-words font-[var(--font-space-grotesk)] text-2xl font-semibold leading-tight text-textStrong md:text-3xl">
+            {overview?.recommended_title ?? profile.title}
+          </h3>
+          <p className="mt-3 max-w-5xl text-sm leading-7 text-textBody md:text-base">
+            {overview?.summary ?? profile.valuation_summary}
+          </p>
+        </div>
+        <ScoreGauge score={profile.match_score} />
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <MetaTile icon={CarFront} label={copy.searchResults.matchScore} value={String(profile.match_score)} />
+        <MetaTile
+          icon={ShieldCheck}
+          label={copy.searchResults.matchedCitations}
+          value={String(overview?.evidence_ids.length ?? profile.evidence_ids.length)}
+        />
+        <MetaTile icon={ArrowRight} label={copy.searchResults.nextSteps} value={String(profile.next_steps.length)} />
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <div>
+          <h4 className="font-semibold text-textStrong">{copy.searchResults.matchReasons}</h4>
+          <div className="mt-3 grid gap-2">
+            {profile.why_it_matches.map((reason) => (
+              <div key={reason} className="flex items-start gap-2 text-sm leading-6 text-textBody">
+                <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-accent" />
+                <span>{reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h4 className="font-semibold text-textStrong">{copy.searchResults.nextSteps}</h4>
+          <div className="mt-3 grid gap-2">
+            {profile.next_steps.map((step) => (
+              <div key={step} className="flex items-start gap-2 text-sm leading-6 text-textBody">
+                <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-secondary" />
+                <span>{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function RecommendationProfileCard({
+  car,
+  rank,
+  copy,
+}: {
+  car: RecommendedProfile;
+  rank: number;
+  copy: LocaleCopy;
+}) {
+  return (
+    <article className="surface-card min-w-0 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">#{rank}</span>
+          </div>
+          <h3 className="mt-3 break-words font-[var(--font-space-grotesk)] text-xl font-semibold text-textStrong">{car.title}</h3>
+          <p className="mt-2 text-sm leading-6 text-textBody">{car.valuation_summary}</p>
+        </div>
+        <ScoreGauge score={car.match_score} />
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div>
+          <h4 className="font-semibold text-textStrong">{copy.searchResults.matchReasons}</h4>
+          <div className="mt-3 grid gap-2">
+            {car.why_it_matches.map((reason) => (
+              <div key={reason} className="flex items-start gap-2 text-sm leading-6 text-textBody">
+                <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-accent" />
+                <span>{reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h4 className="font-semibold text-textStrong">{copy.recommendationCard.tradeOffs}</h4>
+          <div className="mt-3 grid gap-2 text-sm leading-6 text-textBody">
+            {car.trade_offs.map((tradeOff) => (
+              <div key={tradeOff} className="flex items-start gap-2">
+                <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-secondary" />
+                <span>{tradeOff}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <h4 className="font-semibold text-textStrong">{copy.searchResults.riskFlags}</h4>
+        <div className="mt-3 grid gap-2">
+          {car.risk_flags.length ? (
+            car.risk_flags.map((flag) => (
+              <div key={`${flag.label}-${flag.reason}`} className={`rounded border p-3 text-sm ${severityStyles[flag.severity]}`}>
+                <div className="font-semibold">{flag.label}</div>
+                <div className="mt-1 leading-6">{flag.reason}</div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded border border-riskLow/90 bg-riskLow p-3 text-sm text-riskLowInk">
+              {copy.searchResults.noMajorRisk}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <MetaTile icon={CarFront} label={copy.searchResults.matchScore} value={String(car.match_score)} />
+        <MetaTile icon={ShieldCheck} label={copy.searchResults.matchedCitations} value={String(car.evidence_ids.length)} />
+        <MetaTile icon={ArrowRight} label={copy.searchResults.nextSteps} value={String(car.next_steps.length)} />
+      </div>
+
+      <div className="mt-5">
+        <h4 className="font-semibold text-textStrong">{copy.searchResults.nextSteps}</h4>
+        <div className="mt-3 grid gap-2">
+          {car.next_steps.map((step) => (
+            <div key={step} className="flex items-start gap-2 text-sm leading-6 text-textBody">
+              <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-secondary" />
+              <span>{step}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function SelectedProfilesStrip({
+  title,
+  description,
+  profiles,
+  locale,
+}: {
+  title: string;
+  description: string;
+  profiles: VehicleProfile[];
+  locale: "en" | "zh-CN";
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-secondary/20 bg-secondarySoft/40 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-textStrong">{title}</div>
+          <p className="mt-1 text-sm leading-6 text-textBody">{description}</p>
+        </div>
+        <span className="badge-secondary">{profiles.length}</span>
+      </div>
+      <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+        {profiles.map((profile) => (
+          <div key={profile.profile_id} className="min-w-56 rounded-lg border border-line bg-white/90 p-3 shadow-inset">
+            <div className="break-words text-sm font-semibold text-textStrong">{profile.title}</div>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted">
+              <span>{translateValue(profile.body_type, locale)}</span>
+              <span>{translateValue(profile.fuel_type, locale)}</span>
+              {profile.estimated_price_min_nzd ? (
+                <span>{formatMoneyRange(profile.estimated_price_min_nzd, profile.estimated_price_max_nzd, locale, profile.market)}</span>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="section-eyebrow">{eyebrow}</div>
-      <h2 className="mt-1 font-[var(--font-space-grotesk)] text-2xl font-semibold text-textStrong">{title}</h2>
+      <h2 className="mt-1 break-words font-[var(--font-space-grotesk)] text-2xl font-semibold text-textStrong">{title}</h2>
     </div>
   );
 }
@@ -348,7 +492,6 @@ function ShortlistCard({
   bodyLabel,
   fuelLabel,
   yearLabel,
-  tbcLabel,
 }: {
   listing: VehicleProfile;
   rank: number;
@@ -361,7 +504,6 @@ function ShortlistCard({
   bodyLabel: string;
   fuelLabel: string;
   yearLabel: string;
-  tbcLabel: string;
 }) {
   return (
     <button
@@ -384,7 +526,7 @@ function ShortlistCard({
               {selected ? selectedLabel : selectLabel}
             </span>
           </div>
-          <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-textStrong">{listing.title}</h3>
+          <h3 className="mt-3 break-words font-[var(--font-space-grotesk)] text-xl font-semibold text-textStrong">{listing.title}</h3>
           <div className="mt-2 flex flex-wrap gap-3 text-sm text-textBody">
             {listing.estimated_price_min_nzd ? (
               <span className="inline-flex items-center gap-1">
@@ -409,14 +551,14 @@ function ShortlistCard({
 
 function PopularModelCard({ model, locale }: { model: PopularModel; locale: "en" | "zh-CN" }) {
   return (
-    <article className="surface-card p-4">
+    <article className="surface-card min-w-0 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">#{model.popularity_rank}</span>
             <span className="rounded-full bg-shell px-3 py-1 text-xs text-muted">{marketLabel(model.market as Market, locale)}</span>
           </div>
-          <h3 className="mt-3 font-[var(--font-space-grotesk)] text-lg font-semibold text-textStrong">{model.display_name}</h3>
+          <h3 className="mt-3 break-words font-[var(--font-space-grotesk)] text-lg font-semibold text-textStrong">{model.display_name}</h3>
           <p className="mt-2 text-sm text-textBody">
             {model.year_start}-{model.year_end}
           </p>
@@ -498,7 +640,7 @@ function AdviceLoadingPanel({
   selectionCountLabel: string;
 }) {
   return (
-    <article className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,rgba(219,234,254,0.94),rgba(255,255,255,0.96)_55%,rgba(255,237,213,0.8))] p-5 shadow-panel">
+    <article className="min-w-0 rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,rgba(219,234,254,0.94),rgba(255,255,255,0.96)_55%,rgba(255,237,213,0.8))] p-5 shadow-panel">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-2xl">
           <div className="badge-secondary">
@@ -538,7 +680,7 @@ function AdviceLoadingPanel({
 
 function AdviceSkeletonCard() {
   return (
-    <article className="surface-card p-4 motion-safe:animate-pulse">
+    <article className="surface-card min-w-0 p-4 motion-safe:animate-pulse">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-2">

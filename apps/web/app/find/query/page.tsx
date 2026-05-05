@@ -100,14 +100,15 @@ export default function FindQueryPage() {
     }
 
     setError(null);
+    setRecommendation(null);
     setIsAdvising(true);
+    document.getElementById("advice")?.scrollIntoView({ behavior: "smooth", block: "start" });
     try {
       const recommendData = await fetchRecommend({
         query: trimmedQuery,
         selected_profile_ids: selectedProfileIds,
       });
       setRecommendation(recommendData);
-      document.getElementById("advice")?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : copy.findQuery.adviceFailed);
     } finally {

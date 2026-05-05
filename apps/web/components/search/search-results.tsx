@@ -7,6 +7,7 @@ import {
   CarFront,
   CircleDollarSign,
   Flame,
+  Loader2,
   ShieldCheck,
   Zap,
 } from "lucide-react";
@@ -41,6 +42,7 @@ export function SearchResults({
 }: SearchResultsProps) {
   const { copy, locale } = useLocale();
   const selectedSet = new Set(selectedProfileIds);
+  const selectedProfiles = retrieval?.vehicle_profiles.filter((profile) => selectedSet.has(profile.profile_id)) ?? [];
   const recommendationProvider =
     typeof recommendation?.debug?.recommendation_provider === "string" ? recommendation.debug.recommendation_provider : null;
   const generationSource = typeof recommendation?.debug?.generation_source === "string" ? recommendation.debug.generation_source : null;
@@ -99,6 +101,7 @@ export function SearchResults({
                 listing={listing}
                 rank={index + 1}
                 selected={selectedSet.has(listing.profile_id)}
+                disabled={Boolean(recommendationLoading)}
                 onToggle={() => onToggleSelection(listing.profile_id)}
                 locale={locale}
                 selectLabel={copy.searchResults.selectLabel}
@@ -116,6 +119,26 @@ export function SearchResults({
 
         <aside id="advice" className="grid content-start gap-4">
           <SectionTitle eyebrow={copy.searchResults.aiAdvice} title={copy.searchResults.aiAdviceTitle} />
+          {recommendationLoading ? (
+            <>
+              <AdviceLoadingPanel
+                title={copy.searchResults.adviceLoadingTitle}
+                description={copy.searchResults.adviceLoadingDescription}
+                stageOne={copy.searchResults.adviceLoadingStageOne}
+                stageTwo={copy.searchResults.adviceLoadingStageTwo}
+                stageThree={copy.searchResults.adviceLoadingStageThree}
+                selectedProfiles={selectedProfiles.map((profile) => ({
+                  id: profile.profile_id,
+                  title: profile.title,
+                }))}
+                selectionCountLabel={formatTemplate(copy.searchResults.adviceLoadingSelectionCount, {
+                  count: selectedProfiles.length,
+                })}
+              />
+              <AdviceSkeletonCard />
+              <AdviceSkeletonCard />
+            </>
+          ) : null}
           {recommendation?.recommendation_overview ? (
             <article className="rounded-lg border border-[#00a8ff]/30 bg-[linear-gradient(135deg,rgba(0,168,255,0.18),rgba(0,229,255,0.08))] p-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -236,7 +259,7 @@ export function SearchResults({
                 </div>
               </article>
             ))
-          ) : (
+          ) : recommendationLoading ? null : (
             <EmptyPanel text={copy.searchResults.emptyAdvice} />
           )}
         </aside>
@@ -294,8 +317,9 @@ function SelectionToolbar({
           type="button"
           onClick={onRequestAdvice}
           disabled={disabled}
-          className="inline-flex h-11 items-center justify-center rounded bg-[#00a8ff] px-5 text-sm font-semibold text-white transition hover:bg-[#2ab7ff] disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded bg-[#00a8ff] px-5 text-sm font-semibold text-white transition hover:bg-[#2ab7ff] disabled:cursor-not-allowed disabled:opacity-70"
         >
+          {loading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : null}
           {loading ? buttonLoadingLabel : buttonLabel}
         </button>
       </div>
@@ -316,6 +340,7 @@ function ShortlistCard({
   listing,
   rank,
   selected,
+  disabled,
   onToggle,
   locale,
   selectLabel,
@@ -328,6 +353,7 @@ function ShortlistCard({
   listing: VehicleProfile;
   rank: number;
   selected: boolean;
+  disabled?: boolean;
   onToggle: () => void;
   locale: "en" | "zh-CN";
   selectLabel: string;
@@ -341,7 +367,8 @@ function ShortlistCard({
     <button
       type="button"
       onClick={onToggle}
-      className={`w-full rounded-lg border p-4 text-left transition ${
+      disabled={disabled}
+      className={`w-full rounded-lg border p-4 text-left transition disabled:cursor-wait disabled:opacity-80 ${
         selected ? "border-[#00e5ff] bg-[#1e2023]" : "border-white/10 bg-[#1a1c1f] hover:border-[#00e5ff]/50"
       }`}
     >
@@ -450,6 +477,96 @@ function ScoreGauge({ score }: { score: number }) {
       <div className="text-[11px] uppercase tracking-[0.18em] text-[#9ddfff]">Score</div>
       <div className="mt-1 text-2xl font-semibold text-white">{score}</div>
     </div>
+  );
+}
+
+function AdviceLoadingPanel({
+  title,
+  description,
+  stageOne,
+  stageTwo,
+  stageThree,
+  selectedProfiles,
+  selectionCountLabel,
+}: {
+  title: string;
+  description: string;
+  stageOne: string;
+  stageTwo: string;
+  stageThree: string;
+  selectedProfiles: Array<{ id: string; title: string }>;
+  selectionCountLabel: string;
+}) {
+  return (
+    <article className="rounded-2xl border border-[#00a8ff]/25 bg-[linear-gradient(135deg,rgba(0,168,255,0.2),rgba(9,17,27,0.96)_55%,rgba(138,230,106,0.14))] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#00e5ff]/25 bg-[#00e5ff]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#bdf4ff]">
+            <Loader2 className="h-4 w-4 motion-safe:animate-spin" />
+            {title}
+          </div>
+          <p className="mt-3 text-sm leading-7 text-[#d8e9f7]">{description}</p>
+        </div>
+        <div className="rounded-full border border-[#8ae66a]/25 bg-[#8ae66a]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#d8ffcb]">
+          {selectionCountLabel}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {selectedProfiles.map((profile) => (
+          <span
+            key={profile.id}
+            className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-medium text-[#e6eef8]"
+          >
+            {profile.title}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {[stageOne, stageTwo, stageThree].map((stage, index) => (
+          <div key={stage} className="rounded-xl border border-white/10 bg-black/15 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00a8ff]/18 text-sm font-semibold text-[#bdf4ff]">
+                {index + 1}
+              </div>
+              <div className="text-sm font-medium text-white">{stage}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function AdviceSkeletonCard() {
+  return (
+    <article className="rounded-lg border border-white/10 bg-[#1a1c1f] p-4 motion-safe:animate-pulse">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-10 rounded bg-white/10" />
+            <div className="h-6 w-24 rounded bg-[#ccff00]/20" />
+          </div>
+          <div className="mt-3 h-7 w-3/4 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-full rounded bg-white/10" />
+          <div className="mt-2 h-4 w-5/6 rounded bg-white/10" />
+        </div>
+        <div className="h-16 w-16 rounded-full border border-[#00e5ff]/20 bg-[#00e5ff]/8" />
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <div className="h-20 rounded-lg border border-white/10 bg-[#111317]" />
+        <div className="h-20 rounded-lg border border-white/10 bg-[#111317]" />
+        <div className="h-20 rounded-lg border border-white/10 bg-[#111317]" />
+      </div>
+
+      <div className="mt-5 grid gap-2">
+        <div className="h-4 w-full rounded bg-white/10" />
+        <div className="h-4 w-11/12 rounded bg-white/10" />
+        <div className="h-4 w-4/5 rounded bg-white/10" />
+      </div>
+    </article>
   );
 }
 

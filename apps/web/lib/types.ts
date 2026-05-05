@@ -5,6 +5,8 @@ export type VehicleProfile = {
   title: string;
   brand: string;
   model: string;
+  market: string;
+  market_variant_id?: string | null;
   generation_label?: string | null;
   facelift_label?: string | null;
   year_start: number;
@@ -50,6 +52,7 @@ export type KnowledgeSource = {
   model: string;
   year_range?: string | null;
   market?: string | null;
+  market_variant_id?: string | null;
   profile_id?: string | null;
   generation_label?: string | null;
   trim?: string | null;
@@ -68,13 +71,34 @@ export type RetrievedChunk = {
   source_type: string;
   brand: string;
   model: string;
+  market?: string | null;
   profile_id?: string | null;
   evidence_level?: string | null;
   text: string;
   similarity?: number | null;
 };
 
+export type Market = "US" | "CN";
+
+export type PopularModel = {
+  market_variant_id: string;
+  canonical_model_id: string;
+  market: Market;
+  brand: string;
+  model: string;
+  display_name: string;
+  year_start: number;
+  year_end: number;
+  body_types: string[];
+  fuel_types: string[];
+  popularity_rank: number;
+  brand_popularity_rank: number;
+  relevance_score: number;
+  match_reasons: string[];
+};
+
 export type RetrieveRequest = {
+  market: Market;
   query?: string;
   budget_max?: number;
   brands?: string[];
@@ -88,6 +112,7 @@ export type RetrieveRequest = {
 export type RetrieveResponse = {
   query?: string | null;
   applied_filters: Record<string, unknown>;
+  popular_models: PopularModel[];
   vehicle_profiles: VehicleProfile[];
   knowledge: KnowledgeSource[];
   chunks: RetrievedChunk[];

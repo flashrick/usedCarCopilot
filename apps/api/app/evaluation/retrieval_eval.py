@@ -11,22 +11,21 @@ from typing import Any
 
 
 MODEL_ALIASES: dict[str, str] = {
-    "toyota aqua": "Toyota Aqua",
-    "aqua": "Toyota Aqua",
-    "toyota prius": "Toyota Prius",
-    "prius": "Toyota Prius",
     "toyota rav4": "Toyota RAV4",
     "rav4": "Toyota RAV4",
-    "honda fit": "Honda Fit",
-    "fit": "Honda Fit",
+    "honda cr v": "Honda CR-V",
+    "cr v": "Honda CR-V",
+    "crv": "Honda CR-V",
     "honda civic": "Honda Civic",
     "civic": "Honda Civic",
-    "honda hr v": "Honda HR-V",
-    "hrv": "Honda HR-V",
-    "mazda2": "Mazda Mazda2",
-    "mazda3": "Mazda Mazda3",
-    "mazda cx 5": "Mazda CX-5",
-    "cx 5": "Mazda CX-5",
+    "toyota camry": "Toyota Camry",
+    "camry": "Toyota Camry",
+    "tesla model y": "Tesla Model Y",
+    "model y": "Tesla Model Y",
+    "byd song plus": "BYD Song Plus",
+    "song plus": "BYD Song Plus",
+    "byd qin plus": "BYD Qin Plus",
+    "qin plus": "BYD Qin Plus",
 }
 
 THEME_ALIASES: dict[str, tuple[str, ...]] = {
@@ -63,7 +62,7 @@ def run_retrieval_eval(config: RetrievalEvalConfig) -> dict[str, Any]:
 
 
 def evaluate_case(case: dict[str, Any], config: RetrievalEvalConfig) -> dict[str, Any]:
-    response = post_retrieve(config.api_url, case["query"], config.limit, config.timeout_seconds)
+    response = post_retrieve(config.api_url, case["query"], case.get("market", "US"), config.limit, config.timeout_seconds)
     expected_models = [canonical_model_name(model) for model in case.get("expected_candidate_models", [])]
     retrieved_models = sorted(extract_models(response))
     model_hits = [model for model in expected_models if model in retrieved_models]
@@ -98,9 +97,9 @@ def evaluate_case(case: dict[str, Any], config: RetrievalEvalConfig) -> dict[str
     }
 
 
-def post_retrieve(api_url: str, query: str, limit: int, timeout_seconds: float) -> dict[str, Any]:
+def post_retrieve(api_url: str, query: str, market: str, limit: int, timeout_seconds: float) -> dict[str, Any]:
     url = f"{api_url.rstrip('/')}/retrieve"
-    payload = json.dumps({"query": query, "limit": limit}).encode("utf-8")
+    payload = json.dumps({"query": query, "market": market, "limit": limit}).encode("utf-8")
     request = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:

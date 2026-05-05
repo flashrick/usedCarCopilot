@@ -14,6 +14,8 @@ BRAND_RETENTION = {
     "Toyota": 1.06,
     "Honda": 1.01,
     "Mazda": 0.99,
+    "Tesla": 1.04,
+    "BYD": 1.03,
 }
 
 FUEL_RETENTION = {
@@ -40,6 +42,7 @@ CONFIDENCE_BY_BAND = {
 
 def compute_profile_valuation(profile: dict[str, Any], as_of: date | None = None) -> dict[str, Any]:
     valuation_date = as_of or date.today()
+    market = str(profile.get("market") or profile.get("valuation_market") or "NZ").upper()
     year_end = int(profile["year_end"])
     current_age = max(1, valuation_date.year - year_end)
     base_msrp = int(profile.get("base_msrp_nzd") or 30000)
@@ -89,7 +92,7 @@ def compute_profile_valuation(profile: dict[str, Any], as_of: date | None = None
         confidence = "low" if confidence == "medium" else confidence
 
     notes = (
-        "Estimated for a normal-condition NZ used example with age-normalized mileage. "
+        f"Estimated for a normal-condition {market} used example with age-normalized mileage. "
         "This is a guidance range, not a live asking price."
     )
 
@@ -98,7 +101,7 @@ def compute_profile_valuation(profile: dict[str, Any], as_of: date | None = None
         "estimated_price_mid_nzd": midpoint,
         "estimated_price_max_nzd": maximum,
         "valuation_confidence": confidence,
-        "valuation_market": "NZ",
+        "valuation_market": market,
         "valuation_as_of_date": valuation_date,
         "assumed_condition": "good used condition",
         "assumed_mileage_km": assumed_mileage,

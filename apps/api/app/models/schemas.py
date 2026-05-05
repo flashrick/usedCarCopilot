@@ -13,6 +13,8 @@ class VehicleProfile(BaseModel):
     title: str
     brand: str
     model: str
+    market: str
+    market_variant_id: str | None = None
     generation_label: str | None = None
     facelift_label: str | None = None
     year_start: int
@@ -60,6 +62,7 @@ class KnowledgeSource(BaseModel):
     model: str
     year_range: str | None = None
     market: str | None = None
+    market_variant_id: str | None = None
     profile_id: str | None = None
     generation_label: str | None = None
     trim: str | None = None
@@ -78,13 +81,32 @@ class RetrievedChunk(BaseModel):
     source_type: str
     brand: str
     model: str
+    market: str | None = None
     profile_id: str | None = None
     evidence_level: str | None = None
     text: str
     similarity: float | None = None
 
 
+class PopularModel(BaseModel):
+    market_variant_id: str
+    canonical_model_id: str
+    market: str
+    brand: str
+    model: str
+    display_name: str
+    year_start: int
+    year_end: int
+    body_types: list[str] = Field(default_factory=list)
+    fuel_types: list[str] = Field(default_factory=list)
+    popularity_rank: int
+    brand_popularity_rank: int
+    relevance_score: float
+    match_reasons: list[str] = Field(default_factory=list)
+
+
 class RetrieveRequest(BaseModel):
+    market: str
     query: str | None = None
     budget_max: int | None = None
     brands: list[str] = Field(default_factory=list)
@@ -98,6 +120,7 @@ class RetrieveRequest(BaseModel):
 class RetrieveResponse(BaseModel):
     query: str | None
     applied_filters: dict[str, Any]
+    popular_models: list[PopularModel]
     vehicle_profiles: list[VehicleProfile]
     knowledge: list[KnowledgeSource]
     chunks: list[RetrievedChunk]

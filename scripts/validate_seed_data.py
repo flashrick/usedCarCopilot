@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the seed dataset for vehicle-profile retrieval and valuation."""
+"""Validate the market-aware seed dataset used by retrieval and recommendation."""
 
 from __future__ import annotations
 
@@ -18,11 +18,44 @@ sys.path.insert(0, str(ROOT / "apps" / "api"))
 from app.valuation.service import compute_profile_valuation
 
 
+CANONICAL_MODEL_REQUIRED_FIELDS = {
+    "canonical_model_id",
+    "brand",
+    "model",
+    "canonical_model_slug",
+    "aliases",
+}
+
+MARKET_VARIANT_REQUIRED_FIELDS = {
+    "market_variant_id",
+    "canonical_model_id",
+    "market",
+    "brand",
+    "model",
+    "display_name",
+    "year_start",
+    "year_end",
+    "body_types",
+    "fuel_types",
+}
+
+POPULARITY_REQUIRED_FIELDS = {
+    "market",
+    "market_variant_id",
+    "popularity_rank",
+    "brand_popularity_rank",
+    "source_label",
+    "snapshot_date",
+    "match_tags",
+}
+
 PROFILE_REQUIRED_FIELDS = {
     "profile_id",
     "title",
     "brand",
     "model",
+    "market",
+    "market_variant_id",
     "year_start",
     "year_end",
     "trim",
@@ -48,8 +81,9 @@ KNOWLEDGE_REQUIRED_FIELDS = {
     "title",
     "brand",
     "model",
-    "year_range",
     "market",
+    "market_variant_id",
+    "year_range",
     "tags",
     "summary",
     "text",
@@ -57,29 +91,21 @@ KNOWLEDGE_REQUIRED_FIELDS = {
     "ownership_stage",
 }
 
-TARGET_MODELS = {
-    "Toyota Aqua",
-    "Toyota Prius",
-    "Toyota RAV4",
-    "Honda Fit",
-    "Honda Civic",
-    "Honda HR-V",
-    "Mazda Mazda2",
-    "Mazda Mazda3",
-    "Mazda CX-5",
-}
-
 MODEL_ALIASES = {
-    "Mazda2": "Mazda Mazda2",
-    "Mazda3": "Mazda Mazda3",
-    "Toyota Aqua": "Toyota Aqua",
-    "Toyota Prius": "Toyota Prius",
     "Toyota RAV4": "Toyota RAV4",
-    "Honda Fit": "Honda Fit",
+    "Honda CR-V": "Honda CR-V",
+    "Toyota Camry": "Toyota Camry",
     "Honda Civic": "Honda Civic",
-    "Honda HR-V": "Honda HR-V",
-    "Mazda CX-5": "Mazda CX-5",
-    "CX-5": "Mazda CX-5",
+    "Tesla Model Y": "Tesla Model Y",
+    "BYD Song Plus": "BYD Song Plus",
+    "BYD Qin Plus": "BYD Qin Plus",
+    "RAV4": "Toyota RAV4",
+    "CR-V": "Honda CR-V",
+    "Camry": "Toyota Camry",
+    "Civic": "Honda Civic",
+    "Model Y": "Tesla Model Y",
+    "Song Plus": "BYD Song Plus",
+    "Qin Plus": "BYD Qin Plus",
 }
 
 
@@ -112,8 +138,6 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 def full_model_name(brand: Any, model: Any) -> str:
     if not isinstance(brand, str) or not isinstance(model, str):
         return ""
-    if brand == "Mazda" and model in {"Mazda2", "Mazda3", "CX-5"}:
-        return f"{brand} {model}"
     return f"{brand} {model}"
 
 
@@ -130,7 +154,64 @@ def validate_required_fields(rows: list[dict[str, Any]], required: set[str], lab
     return errors
 
 
-def validate_vehicle_profiles(rows: list[dict[str, Any]]) -> tuple[list[str], set[str]]:
+def validate_canonical_models(rows: list[dict[str, Any]]) -> tuple[list[str], set[str]]:
+    errors = validate_required_fields(rows, CANONICAL_MODEL_REQUIRED_FIELDS, "canonical model")
+    ids = [row.get("canonical_model_id") for row in rows]
+    for model_id, count in Counter(ids).items():
+        if model_id and count > 1:
+            errors.append(f"canonical_model_id is duplicated: {model_id}")
+    return errors, {str(row["canonical_model_id"]) for row in rows if row.get("canonical_model_id")}
+
+
+def validate_market_variants(rows: list[dict[str, Any]], canonical_model_ids: set[str]) -> tuple[list[str], set[str], set[str]]:
+    errors = validate_required_fields(rows, MARKET_VARIANT_REQUIRED_FIELDS, "market variant")
+    ids = [row.get("market_variant_id") for row in rows]
+    display_names_by_market: set[tuple[str, str]] = set()
+    variant_ids: set[str] = set()
+    models: set[str] = set()
+
+    for variant_id, count in Counter(ids).items():
+        if variant_id and count > 1:
+            errors.append(f"market_variant_id is duplicated: {variant_id}")
+
+    for row in rows:
+        variant_id = str(row.get("market_variant_id"))
+        variant_ids.add(variant_id)
+        models.add(full_model_name(row.get("brand"), row.get("model")))
+        if row.get("canonical_model_id") not in canonical_model_ids:
+            errors.append(f"{variant_id}: canonical_model_id does not exist in canonical_models.jsonl")
+        if row.get("market") not in {"US", "CN"}:
+            errors.append(f"{variant_id}: market must be US or CN")
+        if row.get("year_end") < row.get("year_start"):
+            errors.append(f"{variant_id}: year_end must be >= year_start")
+        display_key = (str(row.get("market")), str(row.get("display_name")))
+        if display_key in display_names_by_market:
+            errors.append(f"display_name is duplicated within market: {display_key[0]} {display_key[1]}")
+        display_names_by_market.add(display_key)
+    return errors, variant_ids, models
+
+
+def validate_popularity_rankings(rows: list[dict[str, Any]], market_variant_ids: set[str]) -> list[str]:
+    errors = validate_required_fields(rows, POPULARITY_REQUIRED_FIELDS, "popularity ranking")
+    seen_ranks: set[tuple[str, int]] = set()
+    for row in rows:
+        variant_id = str(row.get("market_variant_id"))
+        if variant_id not in market_variant_ids:
+            errors.append(f"{variant_id}: popularity ranking market_variant_id does not exist")
+        if row.get("market") not in {"US", "CN"}:
+            errors.append(f"{variant_id}: popularity ranking market must be US or CN")
+        try:
+            rank_key = (str(row.get("market")), int(row.get("popularity_rank")))
+        except (TypeError, ValueError):
+            errors.append(f"{variant_id}: popularity_rank must be an integer")
+            continue
+        if rank_key in seen_ranks:
+            errors.append(f"popularity_rank is duplicated within market: {rank_key[0]} rank {rank_key[1]}")
+        seen_ranks.add(rank_key)
+    return errors
+
+
+def validate_vehicle_profiles(rows: list[dict[str, Any]], market_variant_ids: set[str]) -> tuple[list[str], set[str]]:
     errors = validate_required_fields(rows, PROFILE_REQUIRED_FIELDS, "vehicle profile")
     ids = [row.get("profile_id") for row in rows]
     for profile_id, count in Counter(ids).items():
@@ -140,6 +221,10 @@ def validate_vehicle_profiles(rows: list[dict[str, Any]]) -> tuple[list[str], se
     models: set[str] = set()
     for row in rows:
         models.add(full_model_name(row.get("brand"), row.get("model")))
+        if row.get("market") not in {"US", "CN"}:
+            errors.append(f"{row.get('profile_id')}: market must be US or CN")
+        if row.get("market_variant_id") not in market_variant_ids:
+            errors.append(f"{row.get('profile_id')}: market_variant_id does not exist in model_market_variants.jsonl")
         if not isinstance(row.get("common_issues"), list) or not row.get("common_issues"):
             errors.append(f"{row.get('profile_id')}: common_issues must be a non-empty list")
         if not isinstance(row.get("base_msrp_nzd"), int) or row["base_msrp_nzd"] <= 0:
@@ -161,7 +246,7 @@ def validate_vehicle_profiles(rows: list[dict[str, Any]]) -> tuple[list[str], se
     return errors, models
 
 
-def validate_knowledge(rows: list[dict[str, Any]], profile_ids: set[str]) -> tuple[list[str], set[str]]:
+def validate_knowledge(rows: list[dict[str, Any]], profile_ids: set[str], market_variant_ids: set[str]) -> tuple[list[str], set[str]]:
     errors = validate_required_fields(rows, KNOWLEDGE_REQUIRED_FIELDS, "knowledge")
     ids = [row.get("source_id") for row in rows]
     for source_id, count in Counter(ids).items():
@@ -171,6 +256,10 @@ def validate_knowledge(rows: list[dict[str, Any]], profile_ids: set[str]) -> tup
     models: set[str] = set()
     for row in rows:
         models.add(full_model_name(row.get("brand"), row.get("model")))
+        if row.get("market") not in {"US", "CN"}:
+            errors.append(f"{row.get('source_id')}: market must be US or CN")
+        if row.get("market_variant_id") not in market_variant_ids:
+            errors.append(f"{row.get('source_id')}: market_variant_id does not exist in model_market_variants.jsonl")
         if not isinstance(row.get("tags"), list) or not row.get("tags"):
             errors.append(f"{row.get('source_id')}: tags must be a non-empty list")
         text = row.get("text")
@@ -214,10 +303,12 @@ def validate_eval_cases(cases: Any, profile_models: set[str], knowledge_models: 
         if not isinstance(case, dict):
             errors.append(f"eval case {index}: expected an object")
             continue
-        for field in ("id", "query", "expected_filters", "expected_candidate_models", "expected_risk_themes"):
+        for field in ("id", "market", "query", "expected_filters", "expected_candidate_models", "expected_risk_themes"):
             if field not in case:
                 errors.append(f"eval case {case.get('id', index)}: missing {field}")
-        if not isinstance(case.get("query"), str) or len(case["query"].split()) < 4:
+        if case.get("market") not in {"US", "CN"}:
+            errors.append(f"eval case {case.get('id', index)}: market must be US or CN")
+        if not isinstance(case.get("query"), str) or len(case["query"]) < 8:
             errors.append(f"eval case {case.get('id', index)}: query is too short")
 
     referenced_models = collect_eval_models(cases)
@@ -225,16 +316,14 @@ def validate_eval_cases(cases: Any, profile_models: set[str], knowledge_models: 
     missing_models = sorted(model for model in referenced_models if model not in available_models)
     if missing_models:
         errors.append("eval references models missing from vehicle profiles and knowledge: " + ", ".join(missing_models))
-
-    missing_target_profiles = sorted(model for model in TARGET_MODELS if model not in profile_models)
-    if missing_target_profiles:
-        warnings.append("target MVP models missing vehicle profile rows: " + ", ".join(missing_target_profiles))
-
     return errors, warnings
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--canonical-models", type=Path, default=Path("data/seed/canonical_models.jsonl"))
+    parser.add_argument("--market-variants", type=Path, default=Path("data/seed/model_market_variants.jsonl"))
+    parser.add_argument("--popularity", type=Path, default=Path("data/seed/model_popularity_rankings.jsonl"))
     parser.add_argument("--vehicle-profiles", type=Path, default=Path("data/seed/vehicle_profiles.jsonl"))
     parser.add_argument("--knowledge", type=Path, default=Path("data/seed/knowledge_sources.jsonl"))
     parser.add_argument("--eval-cases", type=Path, default=Path("data/seed/eval_cases.json"))
@@ -242,13 +331,21 @@ def main() -> None:
 
     errors: list[str] = []
     warnings: list[str] = []
+
+    canonical_errors, canonical_model_ids = validate_canonical_models(read_jsonl(args.canonical_models))
+    variant_errors, market_variant_ids, variant_models = validate_market_variants(read_jsonl(args.market_variants), canonical_model_ids)
+    popularity_errors = validate_popularity_rankings(read_jsonl(args.popularity), market_variant_ids)
     profile_rows = read_jsonl(args.vehicle_profiles)
-    profile_errors, profile_models = validate_vehicle_profiles(profile_rows)
-    profile_ids = {row["profile_id"] for row in profile_rows}
-    knowledge_errors, knowledge_models = validate_knowledge(read_jsonl(args.knowledge), profile_ids)
+    profile_errors, profile_models = validate_vehicle_profiles(profile_rows, market_variant_ids)
+    profile_ids = {row["profile_id"] for row in profile_rows if row.get("profile_id")}
+    knowledge_errors, knowledge_models = validate_knowledge(read_jsonl(args.knowledge), profile_ids, market_variant_ids)
+    eval_errors, eval_warnings = validate_eval_cases(read_json(args.eval_cases), profile_models | variant_models, knowledge_models | variant_models)
+
+    errors.extend(canonical_errors)
+    errors.extend(variant_errors)
+    errors.extend(popularity_errors)
     errors.extend(profile_errors)
     errors.extend(knowledge_errors)
-    eval_errors, eval_warnings = validate_eval_cases(read_json(args.eval_cases), profile_models, knowledge_models)
     errors.extend(eval_errors)
     warnings.extend(eval_warnings)
 

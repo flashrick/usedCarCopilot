@@ -58,7 +58,7 @@ export function RetrievalTable({ profiles, selectedProfileIds = [], onToggleSele
                     {profile.engine_description} · {profile.transmission.toUpperCase()}
                   </div>
                 </td>
-                <td className="px-3 py-3">{formatMoneyRange(profile.estimated_price_min_nzd, profile.estimated_price_max_nzd, locale)}</td>
+                <td className="px-3 py-3">{formatMoneyRange(profile.estimated_price_min_nzd, profile.estimated_price_max_nzd, locale, profile.market)}</td>
                 <td className="px-3 py-3">{formatConsumption(profile.fuel_consumption_l_per_100km)}</td>
                 <td className="px-3 py-3">{translateValue(profile.fuel_type, locale)}</td>
                 <td className="px-3 py-3">{translateValue(profile.body_type, locale)}</td>

@@ -4,14 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ChevronLeft, Loader2, Search } from "lucide-react";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { MarketSelector } from "@/components/market/market-selector";
 import { fetchRecommend, fetchRetrieve } from "@/lib/api";
+import { marketStorageKey, resolveInitialMarket } from "@/lib/market";
 import type { RecommendResponse, RetrieveResponse } from "@/lib/types";
+import type { Market } from "@/lib/types";
 import { SearchResults } from "@/components/search/search-results";
 
 const defaultQuery = "I need a reliable, cheap-to-run car for daily commuting and easy parking.";
 
 export default function FindQueryPage() {
   const [query, setQuery] = useState(defaultQuery);
+  const [market, setMarket] = useState<Market>("US");
   const [recommendation, setRecommendation] = useState<RecommendResponse | null>(null);
   const [retrieval, setRetrieval] = useState<RetrieveResponse | null>(null);
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
@@ -19,7 +23,7 @@ export default function FindQueryPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [isAdvising, setIsAdvising] = useState(false);
   const hasLoadedInitialQuery = useRef(false);
-  const { copy } = useLocale();
+  const { copy, locale } = useLocale();
 
   useEffect(() => {
     if (hasLoadedInitialQuery.current) {
@@ -29,15 +33,17 @@ export default function FindQueryPage() {
     hasLoadedInitialQuery.current = true;
 
     const initialQuery = new URLSearchParams(window.location.search).get("query")?.trim();
+    const initialMarket = resolveInitialMarket(locale, new URLSearchParams(window.location.search));
+    setMarket(initialMarket);
     if (!initialQuery) {
       return;
     }
 
     setQuery(initialQuery);
-    void runSearch(initialQuery);
-  }, []);
+    void runSearch(initialQuery, initialMarket);
+  }, [locale]);
 
-  async function runSearch(nextQuery = query) {
+  async function runSearch(nextQuery = query, nextMarket = market) {
     const trimmedQuery = nextQuery.trim();
     if (!trimmedQuery) {
       setError(copy.findQuery.emptyQueryError);
@@ -48,7 +54,10 @@ export default function FindQueryPage() {
     setIsSearching(true);
 
     try {
-      const retrievePayload = { query: trimmedQuery, limit: 20 };
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(marketStorageKey, nextMarket);
+      }
+      const retrievePayload = { query: trimmedQuery, market: nextMarket, limit: 20 };
 
       const retrieveData = await fetchRetrieve(retrievePayload);
 
@@ -124,6 +133,7 @@ export default function FindQueryPage() {
           <p className="mt-3 text-sm text-[#8fd7ff]">{copy.findQuery.languageHint}</p>
 
           <div className="mt-4 grid gap-3">
+            <MarketSelector market={market} locale={locale} onChange={setMarket} />
             <label className="grid gap-2 text-sm text-[#c5d3e2]">
               {copy.findQuery.textareaLabel}
               <textarea
@@ -149,7 +159,7 @@ export default function FindQueryPage() {
 
             <button
               type="button"
-              onClick={() => void runSearch(query)}
+              onClick={() => void runSearch(query, market)}
               disabled={isSearching}
               className="inline-flex h-12 items-center justify-center gap-2 rounded bg-[#00a8ff] px-5 text-sm font-semibold text-white transition hover:bg-[#2ab7ff] disabled:cursor-not-allowed disabled:opacity-70"
             >

@@ -19,6 +19,7 @@ class ProviderValidationConfig:
     providers: tuple[str, ...]
     query: str
     limit: int
+    market: str = "US"
     include_missing: bool = False
 
 
@@ -27,7 +28,7 @@ def run_provider_validation(
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     resolved_settings = settings or get_settings()
-    retrieval_response = retrieve(RetrieveRequest(query=config.query, limit=20))
+    retrieval_response = retrieve(RetrieveRequest(query=config.query, market=config.market, limit=20))
     selected_profile_ids = shortlist_profile_ids(retrieval_response, config.limit)
     if len(selected_profile_ids) < 2:
         results = [

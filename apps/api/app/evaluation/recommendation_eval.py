@@ -36,7 +36,7 @@ def run_recommendation_eval(config: RecommendationEvalConfig) -> dict[str, Any]:
 
 
 def evaluate_case(case: dict[str, Any], config: RecommendationEvalConfig) -> dict[str, Any]:
-    retrieval_response = post_retrieve(config.api_url, case["query"], config.retrieve_limit, config.timeout_seconds)
+    retrieval_response = post_retrieve(config.api_url, case["query"], case.get("market", "US"), config.retrieve_limit, config.timeout_seconds)
     selected_profile_ids = shortlist_profile_ids(retrieval_response, config.limit)
     expected_models = [canonical_model_name(model) for model in case.get("expected_candidate_models", [])]
     expected_risks = case.get("expected_risk_themes", [])

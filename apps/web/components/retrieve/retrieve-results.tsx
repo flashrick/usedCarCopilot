@@ -26,7 +26,7 @@ export function RetrieveResults({ data }: { data: RetrieveResponse | null }) {
                 <div>
                   <div className="font-medium">{profile.title}</div>
                   <div className="mt-1 text-xs text-muted">
-                    {formatMoneyRange(profile.estimated_price_min_nzd, profile.estimated_price_max_nzd, locale)} ·{" "}
+                    {formatMoneyRange(profile.estimated_price_min_nzd, profile.estimated_price_max_nzd, locale, profile.market)} ·{" "}
                     {formatConsumption(profile.fuel_consumption_l_per_100km)} · {translateValue(profile.fuel_type, locale)} ·{" "}
                     {translateValue(profile.body_type, locale)}
                   </div>

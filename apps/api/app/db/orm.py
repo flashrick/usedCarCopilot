@@ -64,6 +64,56 @@ class IngestionRunRecord(Base):
     message: Mapped[str | None] = mapped_column(Text)
 
 
+class CanonicalModelRecord(Base):
+    __tablename__ = "canonical_models"
+
+    canonical_model_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    brand: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(Text)
+    canonical_model_slug: Mapped[str] = mapped_column(Text)
+    aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ModelMarketVariantRecord(Base):
+    __tablename__ = "model_market_variants"
+
+    market_variant_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    canonical_model_id: Mapped[str] = mapped_column(ForeignKey("canonical_models.canonical_model_id", ondelete="CASCADE"))
+    market: Mapped[str] = mapped_column(Text)
+    brand: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(Text)
+    display_name: Mapped[str] = mapped_column(Text)
+    local_aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    body_types: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    fuel_types: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ModelPopularityRankingRecord(Base):
+    __tablename__ = "model_popularity_rankings"
+
+    market: Mapped[str] = mapped_column(Text, primary_key=True)
+    market_variant_id: Mapped[str] = mapped_column(
+        ForeignKey("model_market_variants.market_variant_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    popularity_rank: Mapped[int] = mapped_column(Integer)
+    brand_popularity_rank: Mapped[int] = mapped_column(Integer)
+    source_label: Mapped[str] = mapped_column(Text)
+    snapshot_date: Mapped[date] = mapped_column(Date)
+    match_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class VehicleProfileRecord(Base):
     __tablename__ = "vehicle_profiles"
 
@@ -71,6 +121,8 @@ class VehicleProfileRecord(Base):
     title: Mapped[str] = mapped_column(Text)
     brand: Mapped[str] = mapped_column(Text)
     model: Mapped[str] = mapped_column(Text)
+    market: Mapped[str] = mapped_column(Text, default="NZ")
+    market_variant_id: Mapped[str | None] = mapped_column(Text)
     generation_label: Mapped[str | None] = mapped_column(Text)
     facelift_label: Mapped[str | None] = mapped_column(Text)
     year_start: Mapped[int] = mapped_column(Integer)
@@ -122,6 +174,7 @@ class KnowledgeSourceRecord(Base):
     model: Mapped[str] = mapped_column(Text)
     year_range: Mapped[str | None] = mapped_column(Text)
     market: Mapped[str | None] = mapped_column(Text)
+    market_variant_id: Mapped[str | None] = mapped_column(Text)
     profile_id: Mapped[str | None] = mapped_column(Text)
     generation_label: Mapped[str | None] = mapped_column(Text)
     trim: Mapped[str | None] = mapped_column(Text)

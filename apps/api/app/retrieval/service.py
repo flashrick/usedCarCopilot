@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from sqlalchemy import and_, bindparam, or_, select
+from sqlalchemy import and_, bindparam, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -12,6 +12,8 @@ from app.db.orm import (
     ChunkEmbeddingRecord,
     DocumentChunkRecord,
     KnowledgeSourceRecord,
+    ModelMarketVariantRecord,
+    ModelPopularityRankingRecord,
     RequestLogRecord,
     Vector,
     VehicleProfileRecord,
@@ -21,33 +23,32 @@ from app.models.schemas import RetrieveRequest
 
 
 MODEL_ALIASES = {
-    "Toyota Aqua": ("Toyota", "Aqua"),
-    "Aqua": ("Toyota", "Aqua"),
-    "Toyota Prius": ("Toyota", "Prius"),
-    "Prius": ("Toyota", "Prius"),
     "Toyota RAV4": ("Toyota", "RAV4"),
     "RAV4": ("Toyota", "RAV4"),
-    "Honda Fit": ("Honda", "Fit"),
-    "Fit": ("Honda", "Fit"),
+    "Honda CR-V": ("Honda", "CR-V"),
+    "CR-V": ("Honda", "CR-V"),
+    "Toyota Camry": ("Toyota", "Camry"),
+    "Camry": ("Toyota", "Camry"),
     "Honda Civic": ("Honda", "Civic"),
     "Civic": ("Honda", "Civic"),
-    "Honda HR-V": ("Honda", "HR-V"),
-    "HR-V": ("Honda", "HR-V"),
-    "Mazda2": ("Mazda", "Mazda2"),
-    "Mazda Mazda2": ("Mazda", "Mazda2"),
-    "Mazda3": ("Mazda", "Mazda3"),
-    "Mazda Mazda3": ("Mazda", "Mazda3"),
-    "CX-5": ("Mazda", "CX-5"),
-    "Mazda CX-5": ("Mazda", "CX-5"),
+    "Tesla Model Y": ("Tesla", "Model Y"),
+    "Model Y": ("Tesla", "Model Y"),
+    "BYD Song Plus": ("BYD", "Song Plus"),
+    "Song Plus": ("BYD", "Song Plus"),
+    "BYD Qin Plus": ("BYD", "Qin Plus"),
+    "Qin Plus": ("BYD", "Qin Plus"),
 }
 NORMALIZED_MODEL_ALIASES = {
     re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", label.lower())).strip(): pair
     for label, pair in MODEL_ALIASES.items()
 }
-SUPPORTED_BRANDS = ("Toyota", "Honda", "Mazda")
+SUPPORTED_BRANDS = ("Toyota", "Honda", "Tesla", "BYD")
 SUPPORTED_BODY_TYPES = ("hatchback", "sedan", "suv")
 SUPPORTED_FUELS = ("petrol", "hybrid", "diesel", "electric")
 SUPPORTED_TRANSMISSIONS = ("automatic", "cvt", "dct", "manual")
+SUPPORTED_MARKETS = ("US", "CN")
+DEFAULT_POPULAR_MODEL_LIMIT = 8
+POPULAR_RELEVANCE_TIE_DELTA = 0.5
 
 
 def retrieve(request: RetrieveRequest) -> dict[str, Any]:
@@ -55,16 +56,19 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
     limit = filters["limit"]
 
     with get_session() as session:
-        profiles = list(session.scalars(select(VehicleProfileRecord)))
+        popular_models = load_popular_models(session, filters, DEFAULT_POPULAR_MODEL_LIMIT)
+        profiles = load_candidate_profiles(session, filters)
         scored_profiles = sorted(
             profiles,
             key=lambda profile: (-score_profile(profile, filters), profile.estimated_price_mid_nzd or 10**9, profile.profile_id),
         )
         shortlisted_profiles = select_diverse_profiles(scored_profiles, limit)
         candidate_pairs = dedupe_brand_models(shortlisted_profiles or scored_profiles[:limit])
+        if not candidate_pairs:
+            candidate_pairs = [(item["brand"], item["model"]) for item in popular_models[:limit]]
         selected_profile_ids = [profile.profile_id for profile in shortlisted_profiles]
 
-        knowledge = load_relevant_knowledge(session, selected_profile_ids, candidate_pairs, limit)
+        knowledge = load_relevant_knowledge(session, filters["market"], selected_profile_ids, candidate_pairs, limit)
         semantic_chunks = retrieve_semantic_chunks(
             session=session,
             query=request.query,
@@ -88,44 +92,45 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
     return {
         "query": request.query,
         "applied_filters": filters,
+        "popular_models": popular_models,
         "vehicle_profiles": shortlisted_profiles,
         "knowledge": knowledge,
         "chunks": semantic_chunks,
         "debug": {
-            "retrieval_mode": "vehicle_profile_ranker_with_semantic_chunks",
+            "retrieval_mode": "market_aware_popular_models_plus_vehicle_profile_ranker",
             "embedding_search_enabled": bool(semantic_chunks),
             "embedding_model": get_settings().embedding_model,
             "candidate_models": [f"{brand} {model}" for brand, model in candidate_pairs],
             "candidate_profile_ids": selected_profile_ids,
-            "valuation_assumption": "good used condition with age-normalized NZ mileage",
+            "market": filters["market"],
+            "valuation_assumption": "good used condition with market-aware retained-value estimation",
         },
     }
 
 
 def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
+    market = normalize_market(request.market)
     query = (request.query or "").strip()
     normalized_query = normalize_text(query)
+    lowered_query = query.lower()
 
     models = list(request.models)
     for label in MODEL_ALIASES:
         if normalize_text(label) in normalized_query and label not in models:
             models.append(label)
 
-    detected_brands = [brand for brand in SUPPORTED_BRANDS if brand.lower() in query.lower()]
+    detected_brands = [brand for brand in SUPPORTED_BRANDS if brand.lower() in lowered_query]
     brands = dedupe_preserving_order([*request.brands, *detected_brands])
 
     budget_max = request.budget_max
     if budget_max is None:
-        budget_match = re.search(r"(?:under|below|budget(?: is)?|around|up to)\s+\$?([0-9][0-9,]*)", query.lower())
+        budget_match = re.search(r"(?:under|below|budget(?: is)?|around|up to)\s+\$?([0-9][0-9,]*)", lowered_query)
         if budget_match:
             budget_max = int(budget_match.group(1).replace(",", ""))
 
     body_type = normalize_choice(request.body_type, SUPPORTED_BODY_TYPES)
     if body_type is None:
-        for candidate in SUPPORTED_BODY_TYPES:
-            if candidate in normalized_query:
-                body_type = candidate
-                break
+        body_type = infer_body_type(query, normalized_query)
 
     fuel_type = normalize_fuel(request.fuel_type)
     if fuel_type is None:
@@ -138,11 +143,12 @@ def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
                 transmission = candidate
                 break
 
-    usage = infer_usage(normalized_query)
-    priority = infer_priority(normalized_query)
+    usage = infer_usage(query, normalized_query)
+    priority = infer_priority(query, normalized_query)
     compare_models = [f"{brand} {model}" for brand, model in model_pairs(models)]
 
     return {
+        "market": market,
         "query": request.query,
         "budget_max": budget_max,
         "brands": brands,
@@ -155,6 +161,159 @@ def infer_filters(request: RetrieveRequest) -> dict[str, Any]:
         "compare_models": compare_models,
         "limit": request.limit,
     }
+
+
+def load_popular_models(session: Session, filters: dict[str, Any], limit: int) -> list[dict[str, Any]]:
+    statement = (
+        select(ModelMarketVariantRecord, ModelPopularityRankingRecord)
+        .join(
+            ModelPopularityRankingRecord,
+            and_(
+                ModelPopularityRankingRecord.market_variant_id == ModelMarketVariantRecord.market_variant_id,
+                ModelPopularityRankingRecord.market == ModelMarketVariantRecord.market,
+            ),
+        )
+        .where(ModelMarketVariantRecord.market == filters["market"])
+    )
+    brands = filters.get("brands") or []
+    if brands:
+        statement = statement.where(ModelMarketVariantRecord.brand.in_(brands))
+
+    rows = session.execute(statement).all()
+    scored: list[dict[str, Any]] = []
+    for variant, ranking in rows:
+        relevance_score = score_popular_model(variant, ranking, filters)
+        scored.append(
+            {
+                "market_variant_id": variant.market_variant_id,
+                "canonical_model_id": variant.canonical_model_id,
+                "market": variant.market,
+                "brand": variant.brand,
+                "model": variant.model,
+                "display_name": variant.display_name,
+                "year_start": variant.year_start,
+                "year_end": variant.year_end,
+                "body_types": list(variant.body_types or []),
+                "fuel_types": list(variant.fuel_types or []),
+                "popularity_rank": ranking.popularity_rank,
+                "brand_popularity_rank": ranking.brand_popularity_rank,
+                "relevance_score": round(relevance_score, 2),
+                "match_reasons": build_popular_model_reasons(variant, ranking, filters),
+                "_sort_key": popularity_sort_key(relevance_score, ranking.brand_popularity_rank, ranking.popularity_rank, variant.display_name),
+            }
+        )
+    scored.sort(key=lambda item: item["_sort_key"])
+    for item in scored:
+        item.pop("_sort_key", None)
+    return scored[:limit]
+
+
+def popularity_sort_key(relevance_score: float, brand_rank: int, popularity_rank: int, display_name: str) -> tuple[float, int, int, str]:
+    rounded_bucket = int(relevance_score / POPULAR_RELEVANCE_TIE_DELTA)
+    return (-rounded_bucket, brand_rank, popularity_rank, display_name)
+
+
+def score_popular_model(
+    variant: ModelMarketVariantRecord,
+    ranking: ModelPopularityRankingRecord,
+    filters: dict[str, Any],
+) -> float:
+    score = 20.0
+    query = str(filters.get("query") or "")
+    normalized_query = normalize_text(query)
+    lowered_query = query.lower()
+
+    if normalize_text(variant.display_name) in normalized_query or normalize_text(variant.model) in normalized_query:
+        score += 24.0
+    if variant.brand.lower() in lowered_query:
+        score += 12.0
+
+    body_type = filters.get("body_type")
+    if body_type:
+        score += 15.0 if body_type in list(variant.body_types or []) else -5.0
+    fuel_type = filters.get("fuel_type")
+    if fuel_type:
+        score += 14.0 if fuel_group_matches(list(variant.fuel_types or []), fuel_type) else -4.0
+
+    requested_pairs = model_pairs(filters.get("models") or [])
+    if requested_pairs:
+        score += 20.0 if (variant.brand, variant.model) in requested_pairs else -3.0
+
+    usage = filters.get("usage")
+    if usage and tag_matches_usage(list(ranking.match_tags or []), usage):
+        score += 12.0
+
+    priority = filters.get("priority")
+    if priority and tag_matches_priority(list(ranking.match_tags or []), priority):
+        score += 10.0
+
+    if filters.get("budget_max") is not None and any(token in normalized_query for token in ("family", "space", "commut", "reliable")):
+        score += 2.0
+
+    return score
+
+
+def build_popular_model_reasons(
+    variant: ModelMarketVariantRecord,
+    ranking: ModelPopularityRankingRecord,
+    filters: dict[str, Any],
+) -> list[str]:
+    reasons: list[str] = []
+    body_type = filters.get("body_type")
+    if body_type and body_type in list(variant.body_types or []):
+        reasons.append(f"Matches requested {body_type} body style.")
+    fuel_type = filters.get("fuel_type")
+    if fuel_type and fuel_group_matches(list(variant.fuel_types or []), fuel_type):
+        reasons.append(f"Offers the requested {fuel_type} powertrain direction.")
+    usage = filters.get("usage")
+    if usage and tag_matches_usage(list(ranking.match_tags or []), usage):
+        reasons.append(f"Popular with {usage.replace('_', ' ')} use cases in this market.")
+    priority = filters.get("priority")
+    if priority and tag_matches_priority(list(ranking.match_tags or []), priority):
+        reasons.append(f"Aligns with {priority.replace('_', ' ')} preferences.")
+    if not reasons:
+        reasons.append("Ranks highly in this market and remains broadly relevant to the query.")
+    return reasons[:3]
+
+
+def load_candidate_profiles(session: Session, filters: dict[str, Any]) -> list[VehicleProfileRecord]:
+    statement = select(VehicleProfileRecord).where(VehicleProfileRecord.market == filters["market"])
+
+    brands = filters.get("brands") or []
+    if brands:
+        statement = statement.where(VehicleProfileRecord.brand.in_(brands))
+
+    requested_pairs = model_pairs(filters.get("models") or [])
+    if requested_pairs:
+        statement = statement.where(
+            or_(
+                *[
+                    and_(VehicleProfileRecord.brand == brand, VehicleProfileRecord.model == model)
+                    for brand, model in requested_pairs
+                ]
+            )
+        )
+
+    body_type = filters.get("body_type")
+    if body_type:
+        statement = statement.where(func.lower(VehicleProfileRecord.body_type) == body_type)
+
+    fuel_type = filters.get("fuel_type")
+    if fuel_type == "hybrid":
+        statement = statement.where(func.lower(VehicleProfileRecord.fuel_type).like("%hybrid%"))
+    elif fuel_type == "electric":
+        statement = statement.where(func.lower(VehicleProfileRecord.fuel_type).like("%electric%"))
+    elif fuel_type == "diesel":
+        statement = statement.where(func.lower(VehicleProfileRecord.fuel_type).like("%diesel%"))
+    elif fuel_type == "petrol":
+        statement = statement.where(
+            and_(
+                func.lower(VehicleProfileRecord.fuel_type).like("%petrol%"),
+                ~func.lower(VehicleProfileRecord.fuel_type).like("%hybrid%"),
+            )
+        )
+
+    return list(session.scalars(statement.order_by(VehicleProfileRecord.brand.asc(), VehicleProfileRecord.model.asc(), VehicleProfileRecord.profile_id.asc())))
 
 
 def retrieve_semantic_chunks(
@@ -179,6 +338,7 @@ def retrieve_semantic_chunks(
         select(DocumentChunkRecord, KnowledgeSourceRecord, distance)
         .join(ChunkEmbeddingRecord, ChunkEmbeddingRecord.chunk_id == DocumentChunkRecord.chunk_id)
         .join(KnowledgeSourceRecord, KnowledgeSourceRecord.source_id == DocumentChunkRecord.source_id)
+        .where(KnowledgeSourceRecord.market == filters["market"])
         .order_by(distance.asc(), DocumentChunkRecord.chunk_id.asc())
         .limit(max(limit * 4, 10))
     )
@@ -222,6 +382,7 @@ def retrieve_semantic_chunks(
                 "source_type": source.source_type,
                 "brand": source.brand,
                 "model": source.model,
+                "market": source.market,
                 "profile_id": source.profile_id,
                 "evidence_level": source.evidence_level,
                 "text": chunk.text,
@@ -233,11 +394,12 @@ def retrieve_semantic_chunks(
 
 def load_relevant_knowledge(
     session: Session,
+    market: str,
     selected_profile_ids: list[str],
     candidate_pairs: list[tuple[str, str]],
     limit: int,
 ) -> list[KnowledgeSourceRecord]:
-    statement = select(KnowledgeSourceRecord)
+    statement = select(KnowledgeSourceRecord).where(KnowledgeSourceRecord.market == market)
     if selected_profile_ids:
         statement = statement.where(
             or_(
@@ -341,7 +503,9 @@ def priority_fit_score(profile: VehicleProfileRecord, priority: str | None) -> i
     if not priority:
         return 0
     if priority == "low_running_cost":
-        consumption = profile.fuel_consumption_l_per_100km or 99.0
+        consumption = profile.fuel_consumption_l_per_100km if profile.fuel_consumption_l_per_100km is not None else 99.0
+        if consumption == 0:
+            return 8
         if consumption <= 4.5:
             return 10
         if consumption <= 6.0:
@@ -423,41 +587,60 @@ def normalize_fuel(value: str | None) -> str | None:
 
 def infer_fuel(query: str) -> str | None:
     normalized = normalize_text(query)
-    if "hybrid" in normalized:
+    if "hybrid" in normalized or "混动" in query or "dmi" in normalized:
         return "hybrid"
-    if "petrol" in normalized:
+    if "petrol" in normalized or "gasoline" in normalized or "燃油" in query:
         return "petrol"
     if "diesel" in normalized:
         return "diesel"
-    if "electric" in normalized or "ev" in normalized:
+    if "electric" in normalized or "ev" in normalized or "电动" in query or "新能源" in query:
         return "electric"
     return None
 
 
-def infer_usage(normalized_query: str) -> str | None:
-    if any(token in normalized_query for token in ("family", "child", "children")):
+def infer_body_type(query: str, normalized_query: str) -> str | None:
+    if "轿车" in query:
+        return "sedan"
+    if "suv" in normalized_query or "SUV" in query or "越野" in query:
+        return "suv"
+    if "hatchback" in normalized_query or "两厢" in query:
+        return "hatchback"
+    if "sedan" in normalized_query:
+        return "sedan"
+    return None
+
+
+def infer_usage(query: str, normalized_query: str) -> str | None:
+    if any(token in normalized_query for token in ("family", "child", "children")) or "家用" in query or "家庭" in query:
         return "family"
-    if any(token in normalized_query for token in ("first car", "new driver")):
+    if any(token in normalized_query for token in ("first car", "new driver")) or "新手" in query:
         return "first_car"
     if any(token in normalized_query for token in ("uber", "rideshare")):
         return "rideshare"
-    if any(token in normalized_query for token in ("city", "easy to park", "urban")):
+    if any(token in normalized_query for token in ("city", "easy to park", "urban")) or "城市" in query:
         return "city"
-    if "commut" in normalized_query:
+    if "commut" in normalized_query or "通勤" in query:
         return "commute"
     return None
 
 
-def infer_priority(normalized_query: str) -> str | None:
-    if any(token in normalized_query for token in ("cheap to run", "low running", "fuel economy")):
+def infer_priority(query: str, normalized_query: str) -> str | None:
+    if any(token in normalized_query for token in ("cheap to run", "low running", "fuel economy")) or "省油" in query or "省钱" in query:
         return "low_running_cost"
-    if any(token in normalized_query for token in ("premium", "refined", "comfortable")):
+    if any(token in normalized_query for token in ("premium", "refined", "comfortable")) or "舒适" in query:
         return "premium_feel"
-    if any(token in normalized_query for token in ("reliable", "reliability", "low risk", "safer")):
+    if any(token in normalized_query for token in ("reliable", "reliability", "low risk", "safer")) or "省心" in query or "可靠" in query:
         return "reliability"
-    if any(token in normalized_query for token in ("space", "practical", "boot")):
+    if any(token in normalized_query for token in ("space", "practical", "boot")) or "空间" in query:
         return "space_practicality"
     return None
+
+
+def normalize_market(value: str | None) -> str:
+    market = str(value or "").strip().upper()
+    if market not in SUPPORTED_MARKETS:
+        raise ValueError(f"Unsupported market: {value}")
+    return market
 
 
 def dedupe_preserving_order(values: list[str]) -> list[str]:
@@ -477,6 +660,34 @@ def fuel_matches(profile_fuel: str | None, requested_fuel: str) -> bool:
     if requested_fuel == "hybrid":
         return "hybrid" in normalized
     return requested_fuel in normalized
+
+
+def fuel_group_matches(fuels: list[str], requested_fuel: str) -> bool:
+    return any(fuel_matches(fuel, requested_fuel) for fuel in fuels)
+
+
+def tag_matches_usage(tags: list[str], usage: str) -> bool:
+    if usage == "family":
+        return any(tag in tags for tag in ("family", "space"))
+    if usage == "commute":
+        return any(tag in tags for tag in ("commute", "value", "hybrid"))
+    if usage == "city":
+        return any(tag in tags for tag in ("commute", "value", "hatchback"))
+    if usage == "first_car":
+        return any(tag in tags for tag in ("first_car", "value", "commute"))
+    return False
+
+
+def tag_matches_priority(tags: list[str], priority: str) -> bool:
+    if priority == "low_running_cost":
+        return any(tag in tags for tag in ("hybrid", "electric", "value", "commute"))
+    if priority == "premium_feel":
+        return any(tag in tags for tag in ("comfort", "tech"))
+    if priority == "reliability":
+        return any(tag in tags for tag in ("reliability", "family"))
+    if priority == "space_practicality":
+        return any(tag in tags for tag in ("space", "family", "suv"))
+    return False
 
 
 def normalize_text(value: str | None) -> str:

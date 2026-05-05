@@ -9,12 +9,13 @@ import { RecommendationCard } from "@/components/workbench/recommendation-card";
 import { RetrievalTable } from "@/components/workbench/retrieval-table";
 import { fetchRecommend, fetchRetrieve } from "@/lib/api";
 import { parseIntegerInput } from "@/lib/form";
+import { defaultMarketForLocale } from "@/lib/market";
 import type { RecommendResponse, RetrieveResponse } from "@/lib/types";
 
 const defaultQuery = "Which shortlisted vehicle profiles best fit daily commuting, easy parking, and low running costs?";
 
 export default function ComparePage() {
-  const { copy } = useLocale();
+  const { copy, locale } = useLocale();
   const [query, setQuery] = useState(defaultQuery);
   const [budget, setBudget] = useState("20000");
   const [brand, setBrand] = useState("");
@@ -33,6 +34,7 @@ export default function ComparePage() {
     setIsRetrieving(true);
     try {
       const response = await fetchRetrieve({
+        market: defaultMarketForLocale(locale),
         query,
         budget_max: parseIntegerInput(budget),
         brands: brand ? [brand] : undefined,

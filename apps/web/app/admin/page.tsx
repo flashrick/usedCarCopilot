@@ -11,12 +11,13 @@ import { ComparisonMatrix } from "@/components/workbench/comparison-matrix";
 import { RetrievalTable } from "@/components/workbench/retrieval-table";
 import { fetchRecommend, fetchRetrieve } from "@/lib/api";
 import { parseIntegerInput } from "@/lib/form";
+import { defaultMarketForLocale } from "@/lib/market";
 import type { RecommendResponse, RetrieveResponse } from "@/lib/types";
 
 const defaultQuery = "I need a reliable car profile under $20,000 for commuting, low running costs, and easy parking.";
 
 export default function HomePage() {
-  const { copy } = useLocale();
+  const { copy, locale } = useLocale();
   const [query, setQuery] = useState(defaultQuery);
   const [budget, setBudget] = useState("20000");
   const [brand, setBrand] = useState("");
@@ -41,6 +42,7 @@ export default function HomePage() {
       try {
         const maxPrice = parseIntegerInput(budget);
         const payload = {
+          market: defaultMarketForLocale(locale),
           query,
           budget_max: maxPrice,
           brands: brand ? [brand] : undefined,

@@ -1,0 +1,12 @@
+{
+  "canonical_models_added": [],
+  "market_variants_added": [],
+  "vehicle_profiles_added": [],
+  "knowledge_sources_added": [],
+  "counts": {
+    "previous_vehicle_profiles": 10,
+    "current_vehicle_profiles": 10,
+    "previous_market_variants": 10,
+    "current_market_variants": 10
+  }
+}

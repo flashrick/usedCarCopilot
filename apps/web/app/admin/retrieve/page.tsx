@@ -3,11 +3,12 @@
 import { useState, useTransition } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { fetchRetrieve } from "@/lib/api";
+import { defaultMarketForLocale } from "@/lib/market";
 import type { RetrieveResponse } from "@/lib/types";
 import { RetrieveResults } from "@/components/retrieve/retrieve-results";
 
 export default function RetrievePage() {
-  const { copy } = useLocale();
+  const { copy, locale } = useLocale();
   const [query, setQuery] = useState("I want a hatchback profile that is cheap to run, easy to park, and comfortable enough for commuting.");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +18,7 @@ export default function RetrievePage() {
     setError(null);
     startTransition(async () => {
       try {
-        const response = await fetchRetrieve({ query, limit: 8 });
+        const response = await fetchRetrieve({ query, market: defaultMarketForLocale(locale), limit: 8 });
         setData(response);
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : copy.retrievePage.defaultError);

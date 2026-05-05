@@ -5,13 +5,15 @@ import {
   BadgeCheck,
   CarFront,
   CircleDollarSign,
+  Flame,
   ShieldCheck,
   Zap,
 } from "lucide-react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { formatConsumption, formatMoneyRange } from "@/lib/format";
 import { compactLabel, formatTemplate, translateValue } from "@/lib/i18n";
-import type { RecommendResponse, RetrieveResponse, Severity, VehicleProfile } from "@/lib/types";
+import { marketLabel } from "@/lib/market";
+import type { Market, PopularModel, RecommendResponse, RetrieveResponse, Severity, VehicleProfile } from "@/lib/types";
 
 type SearchResultsProps = {
   recommendation: RecommendResponse | null;
@@ -41,6 +43,20 @@ export function SearchResults({
 
   return (
     <>
+      <section className="mx-auto max-w-7xl">
+        <SectionTitle
+          eyebrow={locale === "zh-CN" ? "热门车型" : "Popular Models"}
+          title={locale === "zh-CN" ? "先看当前市场最相关的热门车型" : "Start with the most query-relevant popular models"}
+        />
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {retrieval?.popular_models.length ? (
+            retrieval.popular_models.map((model) => <PopularModelCard key={model.market_variant_id} model={model} locale={locale} />)
+          ) : (
+            <EmptyPanel text={locale === "zh-CN" ? "搜索后会先展示热门车型。" : "Popular models will appear after search."} />
+          )}
+        </div>
+      </section>
+
       <section id="shortlist" className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[0.94fr_1.06fr]">
         <div className="grid content-start gap-4">
           <SectionTitle eyebrow={copy.searchResults.shortlist} title={copy.searchResults.bestMatches} />
@@ -285,7 +301,8 @@ function ShortlistCard({
           <div className="mt-2 flex flex-wrap gap-3 text-sm text-[#c1c6d7]">
             {listing.estimated_price_min_nzd ? (
               <span className="inline-flex items-center gap-1">
-                <CircleDollarSign className="h-4 w-4 text-[#abd600]" /> {formatMoneyRange(listing.estimated_price_min_nzd, listing.estimated_price_max_nzd, locale)}
+                <CircleDollarSign className="h-4 w-4 text-[#abd600]" />{" "}
+                {formatMoneyRange(listing.estimated_price_min_nzd, listing.estimated_price_max_nzd, locale, listing.market)}
               </span>
             ) : null}
             {listing.fuel_consumption_l_per_100km ? <span>{formatConsumption(listing.fuel_consumption_l_per_100km)}</span> : null}
@@ -300,6 +317,50 @@ function ShortlistCard({
         <MetaTile icon={ShieldCheck} label={yearLabel} value={`${listing.year_start}-${listing.year_end}`} />
       </div>
     </button>
+  );
+}
+
+function PopularModelCard({ model, locale }: { model: PopularModel; locale: "en" | "zh-CN" }) {
+  return (
+    <article className="rounded-lg border border-white/10 bg-[#1a1c1f] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded bg-[#ff7a00] px-2 py-1 text-xs font-bold text-white">#{model.popularity_rank}</span>
+            <span className="rounded bg-white/8 px-2 py-1 text-xs text-[#d6e3f2]">{marketLabel(model.market as Market, locale)}</span>
+          </div>
+          <h3 className="mt-3 font-[var(--font-space-grotesk)] text-lg font-semibold text-white">{model.display_name}</h3>
+          <p className="mt-2 text-sm text-[#9fb4c9]">
+            {model.year_start}-{model.year_end}
+          </p>
+        </div>
+        <div className="rounded-lg bg-[#ff7a00]/10 p-2 text-[#ffb066]">
+          <Flame className="h-4 w-4" />
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-xs">
+        {model.body_types.map((bodyType) => (
+          <span key={bodyType} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[#d6e3f2]">
+            {translateValue(bodyType, locale)}
+          </span>
+        ))}
+        {model.fuel_types.map((fuelType) => (
+          <span key={fuelType} className="rounded-full border border-[#00e5ff]/20 bg-[#00e5ff]/10 px-2 py-1 text-[#bdf4ff]">
+            {translateValue(fuelType, locale)}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-2 text-sm leading-6 text-[#c1c6d7]">
+        {model.match_reasons.map((reason) => (
+          <div key={reason} className="flex items-start gap-2">
+            <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-[#ffb066]" />
+            <span>{reason}</span>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 

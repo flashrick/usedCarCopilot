@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.db.connection import get_session
 from app.db.orm import KnowledgeSourceRecord, RequestLogRecord, VehicleProfileRecord
 from app.models.schemas import RecommendRequest, RetrieveRequest
-from app.retrieval.service import infer_filters, retrieve_semantic_chunks, score_profile
+from app.retrieval.service import infer_filters, load_relevant_knowledge, retrieve_semantic_chunks, score_profile
 
 
 OPENAI_DEFAULT_MODEL = "gpt-5-mini"
@@ -408,10 +408,14 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
 def build_selected_retrieval_response(session: Any, request: RecommendRequest) -> dict[str, Any]:
     query, selected_profile_ids = validate_recommend_request(request)
     profiles = load_selected_profiles(session, selected_profile_ids)
-    filters = infer_filters(RetrieveRequest(query=query, limit=len(selected_profile_ids)))
+    selected_markets = {profile.market for profile in profiles}
+    if len(selected_markets) != 1:
+        raise RecommendationRequestError("selected profile ids must belong to the same market")
+    market = selected_markets.pop()
+    filters = infer_filters(RetrieveRequest(query=query, market=market, limit=len(selected_profile_ids)))
     filters["selected_profile_ids"] = selected_profile_ids
     candidate_pairs = dedupe_model_pairs(profiles)
-    knowledge = load_selected_knowledge(session, selected_profile_ids, candidate_pairs)
+    knowledge = load_selected_knowledge(session, market, selected_profile_ids, candidate_pairs)
     semantic_chunks = retrieve_semantic_chunks(
         session=session,
         query=query,
@@ -430,6 +434,7 @@ def build_selected_retrieval_response(session: Any, request: RecommendRequest) -
             "candidate_models": [f"{brand} {model}" for brand, model in candidate_pairs],
             "selected_profile_ids": selected_profile_ids,
             "selected_profile_count": len(selected_profile_ids),
+            "market": market,
             "retrieval_mode": "selected_profiles_plus_semantic_chunks",
             "embedding_search_enabled": bool(semantic_chunks),
             "embedding_model": get_settings().embedding_model,
@@ -462,27 +467,11 @@ def load_selected_profiles(session: Any, selected_profile_ids: list[str]) -> lis
 
 def load_selected_knowledge(
     session: Any,
+    market: str,
     selected_profile_ids: list[str],
     candidate_pairs: list[tuple[str, str]],
 ) -> list[KnowledgeSourceRecord]:
-    return list(
-        session.scalars(
-            select(KnowledgeSourceRecord)
-            .where(
-                or_(
-                    KnowledgeSourceRecord.profile_id.in_(selected_profile_ids),
-                    or_(
-                        *[
-                            and_(KnowledgeSourceRecord.brand == brand, KnowledgeSourceRecord.model == model)
-                            for brand, model in candidate_pairs
-                        ]
-                    ),
-                )
-            )
-            .order_by(KnowledgeSourceRecord.profile_id.is_(None), KnowledgeSourceRecord.source_id.asc())
-            .limit(max(len(candidate_pairs) * 3, 12))
-        )
-    )
+    return load_relevant_knowledge(session, market, selected_profile_ids, candidate_pairs, max(len(candidate_pairs), 4))
 
 
 def get_recommendation_generator(
@@ -540,8 +529,9 @@ def build_query_summary(query: str | None, filters: dict[str, Any]) -> dict[str,
     budget = filters.get("budget_max")
     usage = filters.get("usage") or "general used-car profile selection"
     preferences = [value for value in [filters.get("fuel_type"), filters.get("body_type"), filters.get("transmission"), filters.get("priority")] if value]
+    market = str(filters.get("market") or "US")
     return {
-        "budget": f"Under NZ${budget:,}" if isinstance(budget, int) else "Flexible budget",
+        "budget": format_budget_summary(budget, market),
         "usage": usage.replace("_", " "),
         "preferences": [str(item).replace("_", " ") for item in preferences],
     }
@@ -629,9 +619,11 @@ def build_risk_flags(
 def build_valuation_summary(profile: VehicleProfileRecord) -> str:
     if profile.estimated_price_mid_nzd is None:
         return "Deterministic valuation range unavailable."
+    currency = market_currency_code(profile.market or profile.valuation_market)
+    symbol = {"USD": "$", "CNY": "CNY ", "NZD": "NZ$"}.get(currency, f"{currency} ")
     return (
-        f"Estimated NZ fair range: NZ${profile.estimated_price_min_nzd:,}-NZ${profile.estimated_price_max_nzd:,} "
-        f"(midpoint NZ${profile.estimated_price_mid_nzd:,}) for a good-condition used example."
+        f"Estimated {profile.market} fair range: {symbol}{profile.estimated_price_min_nzd:,}-{symbol}{profile.estimated_price_max_nzd:,} "
+        f"(midpoint {symbol}{profile.estimated_price_mid_nzd:,}) for a good-condition used example."
     )
 
 
@@ -644,6 +636,26 @@ def build_next_steps(profile: VehicleProfileRecord, risk_flags: list[dict[str, A
     if any(flag["label"] == "Hybrid system check" for flag in risk_flags):
         steps.append("Prioritize hybrid battery health, warning-light scan, and cooling-system service evidence.")
     return dedupe_non_empty(steps)
+
+
+def format_budget_summary(budget: Any, market: str) -> str:
+    if not isinstance(budget, int):
+        return "Flexible budget"
+    currency = market_currency_code(market)
+    if currency == "CNY":
+        return f"Under CNY {budget:,}"
+    if currency == "USD":
+        return f"Under ${budget:,}"
+    return f"Under NZ${budget:,}"
+
+
+def market_currency_code(market: str | None) -> str:
+    normalized = str(market or "").upper()
+    if normalized == "CN":
+        return "CNY"
+    if normalized == "US":
+        return "USD"
+    return "NZD"
 
 
 def add_profile_evidence(profile: VehicleProfileRecord, evidence: dict[str, dict[str, str]]) -> str:

@@ -9,10 +9,13 @@ from sqlalchemy import func, select
 
 from app.db.connection import get_session
 from app.db.orm import (
+    CanonicalModelRecord,
     DocumentChunkRecord,
     EvalCaseRecord,
     IngestionRunRecord,
     KnowledgeSourceRecord,
+    ModelMarketVariantRecord,
+    ModelPopularityRankingRecord,
     VehicleProfileRecord,
 )
 from app.valuation.service import compute_profile_valuation
@@ -58,6 +61,9 @@ def chunk_text(text: str, max_words: int = 180) -> list[str]:
 
 
 def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
+    canonical_models = read_jsonl(seed_dir / "canonical_models.jsonl")
+    market_variants = read_jsonl(seed_dir / "model_market_variants.jsonl")
+    popularity_rankings = read_jsonl(seed_dir / "model_popularity_rankings.jsonl")
     vehicle_profiles = read_jsonl(seed_dir / "vehicle_profiles.jsonl")
     knowledge_sources = read_jsonl(seed_dir / "knowledge_sources.jsonl")
     eval_cases = read_json(seed_dir / "eval_cases.json")
@@ -71,6 +77,53 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
         session.flush()
 
         try:
+            for row in canonical_models:
+                session.merge(
+                    CanonicalModelRecord(
+                        canonical_model_id=row["canonical_model_id"],
+                        brand=row["brand"],
+                        model=row["model"],
+                        canonical_model_slug=row["canonical_model_slug"],
+                        aliases=row.get("aliases", []),
+                        raw_payload=make_json_compatible(row),
+                        updated_at=func.now(),
+                    )
+                )
+
+            for row in market_variants:
+                session.merge(
+                    ModelMarketVariantRecord(
+                        market_variant_id=row["market_variant_id"],
+                        canonical_model_id=row["canonical_model_id"],
+                        market=row["market"],
+                        brand=row["brand"],
+                        model=row["model"],
+                        display_name=row["display_name"],
+                        local_aliases=row.get("local_aliases", []),
+                        year_start=row["year_start"],
+                        year_end=row["year_end"],
+                        body_types=row.get("body_types", []),
+                        fuel_types=row.get("fuel_types", []),
+                        raw_payload=make_json_compatible(row),
+                        updated_at=func.now(),
+                    )
+                )
+
+            for row in popularity_rankings:
+                session.merge(
+                    ModelPopularityRankingRecord(
+                        market=row["market"],
+                        market_variant_id=row["market_variant_id"],
+                        popularity_rank=row["popularity_rank"],
+                        brand_popularity_rank=row["brand_popularity_rank"],
+                        source_label=row["source_label"],
+                        snapshot_date=date.fromisoformat(row["snapshot_date"]),
+                        match_tags=row.get("match_tags", []),
+                        raw_payload=make_json_compatible(row),
+                        updated_at=func.now(),
+                    )
+                )
+
             for row in vehicle_profiles:
                 valuation = compute_profile_valuation(row)
                 session.merge(
@@ -79,6 +132,8 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
                         title=row["title"],
                         brand=row["brand"],
                         model=row["model"],
+                        market=row.get("market") or valuation["valuation_market"],
+                        market_variant_id=row.get("market_variant_id"),
                         generation_label=row.get("generation_label"),
                         facelift_label=row.get("facelift_label"),
                         year_start=row["year_start"],
@@ -130,6 +185,7 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
                         model=row["model"],
                         year_range=row.get("year_range"),
                         market=row.get("market"),
+                        market_variant_id=row.get("market_variant_id"),
                         profile_id=row.get("profile_id"),
                         generation_label=row.get("generation_label"),
                         trim=row.get("trim"),
@@ -156,7 +212,9 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
                             metadata_={
                                 "brand": row["brand"],
                                 "model": row["model"],
+                                "market": row.get("market"),
                                 "profile_id": row.get("profile_id"),
+                                "market_variant_id": row.get("market_variant_id"),
                                 "generation_label": row.get("generation_label"),
                                 "trim": row.get("trim"),
                                 "powertrain_tags": row.get("powertrain_tags", []),
@@ -192,6 +250,9 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
             raise
 
     return {
+        "canonical_models": len(canonical_models),
+        "market_variants": len(market_variants),
+        "popularity_rankings": len(popularity_rankings),
         "vehicle_profiles": len(vehicle_profiles),
         "knowledge_sources": len(knowledge_sources),
         "eval_cases": len(eval_cases),

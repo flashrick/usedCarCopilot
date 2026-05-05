@@ -1,15 +1,25 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, MessageSquareText, Sparkles } from "lucide-react";
+import { MarketSelector } from "@/components/market/market-selector";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { marketStorageKey, resolveInitialMarket } from "@/lib/market";
+import type { Market } from "@/lib/types";
 
 export function HomeSearchHero() {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const { copy } = useLocale();
+  const [market, setMarket] = useState<Market>("US");
+  const { copy, locale } = useLocale();
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setMarket(resolveInitialMarket(locale, new URLSearchParams(window.location.search)));
+    }
+  }, [locale]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -19,7 +29,10 @@ export function HomeSearchHero() {
       return;
     }
 
-    router.push(`/find/query?query=${encodeURIComponent(trimmedQuery)}`);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(marketStorageKey, market);
+    }
+    router.push(`/find/query?market=${encodeURIComponent(market)}&query=${encodeURIComponent(trimmedQuery)}`);
   }
 
   return (
@@ -69,6 +82,8 @@ export function HomeSearchHero() {
             />
           </label>
 
+          <MarketSelector market={market} locale={locale} onChange={setMarket} />
+
           <div className="flex flex-wrap gap-2">
             {copy.home.examplePrompts.map((prompt) => (
               <button
@@ -92,7 +107,7 @@ export function HomeSearchHero() {
               <ArrowRight className="h-4 w-4" />
             </button>
             <Link
-              href="/find/query"
+              href={`/find/query?market=${encodeURIComponent(market)}`}
               className="inline-flex h-12 items-center rounded border border-white/20 px-5 text-sm font-semibold text-[#d6e3f2] transition hover:bg-white/10"
             >
               {copy.home.workspaceButton}

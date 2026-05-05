@@ -1,11 +1,23 @@
 import { defaultLocale, translateValue, type Locale } from "@/lib/i18n";
 import type { Severity } from "@/lib/types";
 
-export function formatMoney(value?: number | null, locale: Locale = defaultLocale): string {
+function currencyForMarket(market?: string | null): string {
+  if (market === "CN") return "CNY";
+  if (market === "US") return "USD";
+  return "NZD";
+}
+
+function localeForMoney(locale: Locale, market?: string | null): string {
+  if (market === "CN") return "zh-CN";
+  if (market === "US") return locale === "zh-CN" ? "zh-CN" : "en-US";
+  return locale === "zh-CN" ? "zh-CN" : "en-NZ";
+}
+
+export function formatMoney(value?: number | null, locale: Locale = defaultLocale, market?: string | null): string {
   if (value === null || value === undefined) return translateValue(null, locale);
-  return new Intl.NumberFormat(locale === "zh-CN" ? "zh-CN" : "en-NZ", {
+  return new Intl.NumberFormat(localeForMoney(locale, market), {
     style: "currency",
-    currency: "NZD",
+    currency: currencyForMarket(market),
     maximumFractionDigits: 0,
   }).format(value);
 }
@@ -19,11 +31,12 @@ export function formatMoneyRange(
   minimum?: number | null,
   maximum?: number | null,
   locale: Locale = defaultLocale,
+  market?: string | null,
 ): string {
   if (minimum === null || minimum === undefined || maximum === null || maximum === undefined) {
     return translateValue(null, locale);
   }
-  return `${formatMoney(minimum, locale)} - ${formatMoney(maximum, locale)}`;
+  return `${formatMoney(minimum, locale, market)} - ${formatMoney(maximum, locale, market)}`;
 }
 
 export function formatConsumption(value?: number | null): string {

@@ -27,6 +27,7 @@ from app.retrieval.service import (
 )
 from app.valuation.service import compute_profile_valuation
 from scripts.sync_market_catalog import build_diff, build_outputs, read_json
+from starlette.requests import Request
 
 
 class ValuationTests(unittest.TestCase):
@@ -301,8 +302,20 @@ class RecommendationRegressionTests(unittest.TestCase):
             )
 
     def test_recommend_route_returns_400_for_invalid_selection_payload(self) -> None:
+        http_request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/recommend",
+                "headers": [],
+                "client": ("127.0.0.1", 50000),
+                "scheme": "http",
+                "server": ("testserver", 80),
+                "query_string": b"",
+            }
+        )
         with self.assertRaises(Exception) as caught:
-            recommend_cars(RecommendRequest(query="Find me a family SUV", selected_profile_ids=["car-1"]))
+            recommend_cars(RecommendRequest(query="Find me a family SUV", selected_profile_ids=["car-1"]), http_request)
 
         self.assertIn("select at least 2 profile ids", str(caught.exception))
 

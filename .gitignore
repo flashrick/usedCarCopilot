@@ -61,3 +61,4 @@ apps/api/.mypy_cache/
 apps/web/.next/
 apps/web/coverage/
 learning/
+logs/

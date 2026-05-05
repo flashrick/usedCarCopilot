@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select, text
 
+from app.ai_request_logs import log_ai_recommendation_request
 from app.db.connection import get_session
 from app.db.orm import KnowledgeSourceRecord, VehicleProfileRecord
 from app.models.schemas import KnowledgeSource, RecommendRequest, RecommendResponse, RetrieveRequest, RetrieveResponse, VehicleProfile
@@ -11,6 +12,14 @@ from app.retrieval.service import retrieve
 
 
 router = APIRouter()
+
+
+def try_log_ai_recommendation_request(*args: object, **kwargs: object) -> None:
+    try:
+        log_ai_recommendation_request(*args, **kwargs)
+    except Exception:
+        # Logging must never break the request path.
+        pass
 
 
 @router.get("/health")
@@ -58,8 +67,29 @@ def retrieve_context(request: RetrieveRequest) -> dict:
 
 
 @router.post("/recommend", response_model=RecommendResponse)
-def recommend_cars(request: RecommendRequest) -> dict:
+def recommend_cars(request: RecommendRequest, http_request: Request) -> dict:
     try:
-        return recommend(request)
+        response = recommend(request)
+        try_log_ai_recommendation_request(
+            http_request,
+            request,
+            response=response,
+            status_code=200,
+        )
+        return response
     except RecommendationRequestError as exc:
+        try_log_ai_recommendation_request(
+            http_request,
+            request,
+            status_code=400,
+            error=exc,
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        try_log_ai_recommendation_request(
+            http_request,
+            request,
+            status_code=500,
+            error=exc,
+        )
+        raise

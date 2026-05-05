@@ -172,6 +172,46 @@ export type RecommendResponse = {
   debug: Record<string, unknown>;
 };
 
+export type AuthUser = {
+  id: number;
+  email: string;
+  created_at: string;
+};
+
+export type AuthSessionResponse = {
+  user: AuthUser;
+};
+
+export type RegisterRequest = {
+  email: string;
+  password: string;
+};
+
+export type LoginRequest = {
+  email: string;
+  password: string;
+};
+
+export type HistoryListItem = {
+  id: number;
+  query: string;
+  market: Market;
+  selected_profile_ids: string[];
+  recommended_title?: string | null;
+  recommended_profile_count: number;
+  created_at: string;
+};
+
+export type HistoryDetail = {
+  id: number;
+  query: string;
+  market: Market;
+  selected_profile_ids: string[];
+  recommend_request: RecommendRequest;
+  recommend_response: RecommendResponse;
+  created_at: string;
+};
+
 export type EvalSummary = {
   title: string;
   metrics: Array<{ label: string; value: string }>;

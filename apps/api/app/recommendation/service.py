@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 
 from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.connection import get_session
@@ -408,6 +409,11 @@ class OpenAICompatibleChatRecommendationGenerator:
 
 
 def recommend(request: RecommendRequest) -> dict[str, Any]:
+    with get_session() as session:
+        return recommend_with_session(session, request)
+
+
+def recommend_with_session(session: Session, request: RecommendRequest, *, endpoint: str = "/recommend") -> dict[str, Any]:
     started_at = perf_counter()
     settings = get_settings()
     generator = get_recommendation_generator(
@@ -424,22 +430,21 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
         kimi_base_url=settings.kimi_base_url,
     )
 
-    with get_session() as session:
-        retrieval_response = build_selected_retrieval_response(session, request)
-        generated = generator.generate(request, retrieval_response)
-        generation_metadata = generated.pop("_generation_metadata", {})
-        latency_ms = int((perf_counter() - started_at) * 1000)
-        session.add(
-            RequestLogRecord(
-                endpoint="/recommend",
-                query=request.query,
-                filters=retrieval_response["applied_filters"],
-                listing_count=0,
-                profile_count=len(generated["recommended_profiles"]),
-                knowledge_count=len(generated["evidence"]),
-                latency_ms=latency_ms,
-            )
+    retrieval_response = build_selected_retrieval_response(session, request)
+    generated = generator.generate(request, retrieval_response)
+    generation_metadata = generated.pop("_generation_metadata", {})
+    latency_ms = int((perf_counter() - started_at) * 1000)
+    session.add(
+        RequestLogRecord(
+            endpoint=endpoint,
+            query=request.query,
+            filters=retrieval_response["applied_filters"],
+            listing_count=0,
+            profile_count=len(generated["recommended_profiles"]),
+            knowledge_count=len(generated["evidence"]),
+            latency_ms=latency_ms,
         )
+    )
 
     return {
         "query_summary": generated["query_summary"],
@@ -453,6 +458,7 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
             "candidate_models": retrieval_response["debug"].get("candidate_models", []),
             "selected_profile_ids": retrieval_response["debug"].get("selected_profile_ids", []),
             "selected_profile_count": retrieval_response["debug"].get("selected_profile_count", 0),
+            "market": retrieval_response["debug"].get("market"),
             "retrieved_profile_count": len(retrieval_response["vehicle_profiles"]),
             "retrieved_chunk_count": len(retrieval_response["chunks"]),
             "recommendation_provider": generator.name,

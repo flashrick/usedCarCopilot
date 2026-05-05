@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
-import { LanguageToggle } from "@/components/i18n/language-toggle";
+import { AuthProvider } from "@/components/auth/auth-provider";
 import { LocaleProvider } from "@/components/i18n/locale-provider";
+import { SiteChrome } from "@/components/site/site-chrome";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -32,8 +33,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable} ${spaceGrotesk.variable}`}>
       <body className="font-[var(--font-plex-sans)]">
         <LocaleProvider>
-          <LanguageToggle />
-          {children}
+          <AuthProvider>
+            <SiteChrome>{children}</SiteChrome>
+          </AuthProvider>
         </LocaleProvider>
       </body>
     </html>

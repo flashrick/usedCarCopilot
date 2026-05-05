@@ -4,11 +4,15 @@ import { Languages } from "lucide-react";
 import { localeOptions } from "@/lib/i18n";
 import { useLocale } from "@/components/i18n/locale-provider";
 
-export function LanguageToggle() {
+export function LanguageToggle({ floating = true }: { floating?: boolean }) {
   const { locale, copy, setLocale } = useLocale();
 
   return (
-    <div className="fixed right-4 top-4 z-50 rounded-full border border-line/80 bg-white/92 px-2 py-2 shadow-panel backdrop-blur md:right-6 md:top-6">
+    <div
+      className={`rounded-full border border-line/80 bg-white/92 px-2 py-2 shadow-panel backdrop-blur ${
+        floating ? "fixed right-4 top-4 z-50 md:right-6 md:top-6" : ""
+      }`}
+    >
       <div className="flex items-center gap-2">
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primarySoft text-primaryDeep">
           <Languages className="h-4 w-4" />

@@ -2,10 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronLeft, Loader2, Search } from "lucide-react";
+import { useAuth } from "@/components/auth/auth-provider";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { MarketSelector } from "@/components/market/market-selector";
-import { fetchRecommend, fetchRetrieve } from "@/lib/api";
+import { ApiError, fetchSavedRecommendation, fetchRetrieve } from "@/lib/api";
+import { buildResumeRecommendationPath, clearPendingRecommendation, readPendingRecommendation, savePendingRecommendation } from "@/lib/auth";
 import { marketStorageKey, resolveInitialMarket } from "@/lib/market";
 import type { RecommendResponse, RetrieveResponse } from "@/lib/types";
 import type { Market } from "@/lib/types";
@@ -14,6 +18,7 @@ import { SearchResults } from "@/components/search/search-results";
 const defaultQuery = "I need a reliable, cheap-to-run car for daily commuting and easy parking.";
 
 export default function FindQueryPage() {
+  const router = useRouter();
   const [query, setQuery] = useState(defaultQuery);
   const [market, setMarket] = useState<Market>("US");
   const [recommendation, setRecommendation] = useState<RecommendResponse | null>(null);
@@ -23,7 +28,9 @@ export default function FindQueryPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [isAdvising, setIsAdvising] = useState(false);
   const hasLoadedInitialQuery = useRef(false);
+  const hasResumedRecommendation = useRef(false);
   const { copy, locale } = useLocale();
+  const { refreshUser } = useAuth();
 
   useEffect(() => {
     if (hasLoadedInitialQuery.current) {
@@ -33,6 +40,7 @@ export default function FindQueryPage() {
     hasLoadedInitialQuery.current = true;
 
     const initialQuery = new URLSearchParams(window.location.search).get("query")?.trim();
+    const shouldResumeRecommendation = new URLSearchParams(window.location.search).get("resumeRecommendation") === "1";
     const initialMarket = resolveInitialMarket(locale, new URLSearchParams(window.location.search));
     setMarket(initialMarket);
     if (!initialQuery) {
@@ -40,14 +48,14 @@ export default function FindQueryPage() {
     }
 
     setQuery(initialQuery);
-    void runSearch(initialQuery, initialMarket);
+    void runSearch(initialQuery, initialMarket, { resumeRecommendation: shouldResumeRecommendation });
   }, [locale]);
 
-  async function runSearch(nextQuery = query, nextMarket = market) {
+  async function runSearch(nextQuery = query, nextMarket = market, options?: { resumeRecommendation?: boolean }) {
     const trimmedQuery = nextQuery.trim();
     if (!trimmedQuery) {
       setError(copy.findQuery.emptyQueryError);
-      return;
+      return null;
     }
 
     setError(null);
@@ -65,9 +73,15 @@ export default function FindQueryPage() {
       setRecommendation(null);
       setSelectedProfileIds([]);
 
+      if (options?.resumeRecommendation) {
+        await resumePendingRecommendation(retrieveData, trimmedQuery, nextMarket);
+      }
+
       document.getElementById("shortlist")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return retrieveData;
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : copy.findQuery.searchFailed);
+      return null;
     } finally {
       setIsSearching(false);
     }
@@ -95,12 +109,45 @@ export default function FindQueryPage() {
   }
 
   async function requestAdvice() {
+    await requestAdviceForSelection(selectedProfileIds, query, market);
+  }
+
+  async function resumePendingRecommendation(retrieveData: RetrieveResponse, nextQuery: string, nextMarket: Market) {
+    if (hasResumedRecommendation.current) {
+      return;
+    }
+
+    const pending = readPendingRecommendation();
+    if (!pending || pending.query !== nextQuery || pending.market !== nextMarket) {
+      return;
+    }
+
+    hasResumedRecommendation.current = true;
+    const availableProfileIds = new Set(retrieveData.vehicle_profiles.map((profile) => profile.profile_id));
+    const validSelectedIds = pending.selectedProfileIds.filter((profileId) => availableProfileIds.has(profileId));
+    setSelectedProfileIds(validSelectedIds);
+
+    if (validSelectedIds.length >= 2) {
+      await requestAdviceForSelection(validSelectedIds, nextQuery, nextMarket, { clearPendingOnSuccess: true });
+      return;
+    }
+
+    clearPendingRecommendation();
+  }
+
+  async function requestAdviceForSelection(
+    profileIds: string[],
+    nextQuery: string,
+    nextMarket: Market,
+    options?: { clearPendingOnSuccess?: boolean },
+  ) {
     const trimmedQuery = query.trim();
-    if (!trimmedQuery) {
+    const effectiveQuery = nextQuery.trim() || trimmedQuery;
+    if (!effectiveQuery) {
       setError(copy.findQuery.emptyQueryError);
       return;
     }
-    if (selectedProfileIds.length < 2) {
+    if (profileIds.length < 2) {
       setError(copy.findQuery.selectionMinimumError);
       return;
     }
@@ -110,13 +157,36 @@ export default function FindQueryPage() {
     setIsAdvising(true);
     scrollAdviceIntoView();
     try {
-      const recommendData = await fetchRecommend({
-        query: trimmedQuery,
-        selected_profile_ids: selectedProfileIds,
+      const currentUser = await refreshUser();
+      if (!currentUser) {
+        savePendingRecommendation({
+          query: effectiveQuery,
+          market: nextMarket,
+          selectedProfileIds: profileIds,
+        });
+        router.push(`/login?next=${encodeURIComponent(buildResumeRecommendationPath(effectiveQuery, nextMarket))}` as Route);
+        return;
+      }
+
+      const recommendData = await fetchSavedRecommendation({
+        query: effectiveQuery,
+        selected_profile_ids: profileIds,
       });
       setRecommendation(recommendData);
+      if (options?.clearPendingOnSuccess || readPendingRecommendation()) {
+        clearPendingRecommendation();
+      }
       scrollAdviceIntoView();
     } catch (caughtError) {
+      if (caughtError instanceof ApiError && caughtError.status === 401) {
+        savePendingRecommendation({
+          query: effectiveQuery,
+          market: nextMarket,
+          selectedProfileIds: profileIds,
+        });
+        router.push(`/login?next=${encodeURIComponent(buildResumeRecommendationPath(effectiveQuery, nextMarket))}` as Route);
+        return;
+      }
       setError(caughtError instanceof Error ? caughtError.message : copy.findQuery.adviceFailed);
     } finally {
       setIsAdvising(false);

@@ -24,6 +24,9 @@ class Settings:
     qwen_base_url: str
     kimi_api_key: str | None
     kimi_base_url: str
+    session_cookie_name: str = "used_car_session"
+    session_ttl_days: int = 30
+    session_cookie_secure: bool = False
 
 
 def get_settings() -> Settings:
@@ -35,6 +38,9 @@ def get_settings() -> Settings:
         seed_data_dir=Path(os.getenv("SEED_DATA_DIR", "data/seed")),
         api_host=os.getenv("API_HOST", "0.0.0.0"),
         api_port=int(os.getenv("API_PORT", "8000")),
+        session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "used_car_session"),
+        session_ttl_days=int(os.getenv("SESSION_TTL_DAYS", "30")),
+        session_cookie_secure=os.getenv("SESSION_COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes", "on"},
         embedding_provider=os.getenv("EMBEDDING_PROVIDER", "local_hash"),
         embedding_model=os.getenv("EMBEDDING_MODEL", "local-hash-embedding-v1"),
         recommendation_provider=os.getenv("RECOMMENDATION_PROVIDER", "deterministic"),

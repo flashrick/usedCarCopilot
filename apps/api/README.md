@@ -61,6 +61,9 @@ python3 apps/api/scripts/build_embeddings.py
 Optional local provider settings:
 
 ```bash
+SESSION_COOKIE_NAME=used_car_session
+SESSION_TTL_DAYS=30
+SESSION_COOKIE_SECURE=false
 EMBEDDING_PROVIDER=local_hash
 EMBEDDING_MODEL=local-hash-embedding-v1
 RECOMMENDATION_PROVIDER=deterministic
@@ -134,6 +137,13 @@ cd apps/api
 - `GET /admin/reports`
 - `POST /retrieve`
 - `POST /recommend`
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
+- `GET /me/history`
+- `GET /me/history/{history_id}`
+- `POST /me/recommendations`
 
 `GET /admin/reports` returns read-only operational aggregates for the admin UI, including vehicle-profile coverage, knowledge-source coverage, semantic embedding coverage, retrieval request health, AI recommendation log health, and recent ingestion activity.
 
@@ -142,3 +152,5 @@ cd apps/api
 The retrieval eval runner calls `POST /retrieve` for the 20 seed eval cases, then reports model recall, risk-theme recall, filter recall, semantic chunk coverage, and weakest cases.
 
 `POST /recommend` is the second stage of the flow. It accepts the original natural-language query plus `selected_profile_ids`, rebuilds evidence around those selected vehicle profiles only, ranks them with deterministic structured signals, and returns match scores, reasons, trade-offs, risk flags, valuation summaries, next steps, and evidence ids. The current local recommendation provider is `deterministic`; `openai`, `deepseek`, `qwen`, and `kimi` can be enabled for AI generation behind the same response contract. The recommendation eval runner now calls `POST /retrieve` first, selects the top shortlist profiles, then validates `POST /recommend` on that selected subset.
+
+`POST /me/recommendations` uses the same request and response shape as `POST /recommend`, but requires an authenticated user session cookie and persists the successful recommendation snapshot to the signed-in user's history. The auth flow is email + password with an opaque `HttpOnly` session cookie.

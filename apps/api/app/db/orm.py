@@ -64,6 +64,54 @@ class IngestionRunRecord(Base):
     message: Mapped[str | None] = mapped_column(Text)
 
 
+class UserRecord(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    email: Mapped[str] = mapped_column(Text, unique=True)
+    password_hash: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    sessions: Mapped[list[UserSessionRecord]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    recommendation_history: Mapped[list[RecommendationHistoryRecord]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserSessionRecord(Base):
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    token_hash: Mapped[str] = mapped_column(Text, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[UserRecord] = relationship(back_populates="sessions")
+
+
+class RecommendationHistoryRecord(Base):
+    __tablename__ = "recommendation_history"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    query: Mapped[str] = mapped_column(Text)
+    market: Mapped[str] = mapped_column(Text)
+    selected_profile_ids: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    recommend_request: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    recommend_response: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[UserRecord] = relationship(back_populates="recommendation_history")
+
+
 class CanonicalModelRecord(Base):
     __tablename__ = "canonical_models"
 

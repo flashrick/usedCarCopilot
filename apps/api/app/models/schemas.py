@@ -180,6 +180,52 @@ class RecommendResponse(BaseModel):
     debug: dict[str, Any]
 
 
+class AuthUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    created_at: datetime
+
+
+class AuthSessionResponse(BaseModel):
+    user: AuthUser
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LogoutResponse(BaseModel):
+    ok: bool = True
+
+
+class HistoryListItem(BaseModel):
+    id: int
+    query: str
+    market: str
+    selected_profile_ids: list[str] = Field(default_factory=list)
+    recommended_title: str | None = None
+    recommended_profile_count: int = 0
+    created_at: datetime
+
+
+class HistoryDetail(BaseModel):
+    id: int
+    query: str
+    market: str
+    selected_profile_ids: list[str] = Field(default_factory=list)
+    recommend_request: RecommendRequest
+    recommend_response: RecommendResponse
+    created_at: datetime
+
+
 class ReportMetric(BaseModel):
     label: str
     value: str

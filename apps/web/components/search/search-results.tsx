@@ -4,8 +4,10 @@ import {
   AlertTriangle,
   ArrowRight,
   BadgeCheck,
+  CalendarRange,
   CarFront,
   CircleDollarSign,
+  Cog,
   Flame,
   Loader2,
   ShieldCheck,
@@ -200,6 +202,9 @@ export function SearchResults({
                 selectedLabel={copy.searchResults.selectedBadge}
                 bodyLabel={copy.queryComposer.body}
                 fuelLabel={copy.searchResults.fuel}
+                transmissionLabel={copy.searchResults.transmission}
+                safetyLabel={copy.searchResults.safety}
+                safetyUnratedLabel={copy.searchResults.safetyUnrated}
                 yearLabel={copy.searchResults.year}
               />
             ))}
@@ -491,6 +496,9 @@ function ShortlistCard({
   selectedLabel,
   bodyLabel,
   fuelLabel,
+  transmissionLabel,
+  safetyLabel,
+  safetyUnratedLabel,
   yearLabel,
 }: {
   listing: VehicleProfile;
@@ -503,8 +511,14 @@ function ShortlistCard({
   selectedLabel: string;
   bodyLabel: string;
   fuelLabel: string;
+  transmissionLabel: string;
+  safetyLabel: string;
+  safetyUnratedLabel: string;
   yearLabel: string;
 }) {
+  const transmissionValue = translateValue(listing.transmission_detail ?? listing.transmission, locale);
+  const safetyValue = formatSafetyRating(listing, locale, safetyUnratedLabel);
+
   return (
     <button
       type="button"
@@ -540,10 +554,12 @@ function ShortlistCard({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetaTile icon={CarFront} label={bodyLabel} value={translateValue(listing.body_type, locale)} />
         <MetaTile icon={Zap} label={fuelLabel} value={translateValue(listing.fuel_type, locale)} />
-        <MetaTile icon={ShieldCheck} label={yearLabel} value={`${listing.year_start}-${listing.year_end}`} />
+        <MetaTile icon={Cog} label={transmissionLabel} value={transmissionValue} />
+        <MetaTile icon={ShieldCheck} label={safetyLabel} value={safetyValue} />
+        <MetaTile icon={CalendarRange} label={yearLabel} value={`${listing.year_start}-${listing.year_end}`} />
       </div>
     </button>
   );
@@ -611,6 +627,16 @@ function MetaTile({
       <div className="mt-2 text-sm text-textStrong">{value}</div>
     </div>
   );
+}
+
+function formatSafetyRating(listing: VehicleProfile, locale: "en" | "zh-CN", unratedLabel: string) {
+  if (listing.safety_rating_status === "rated" && typeof listing.safety_rating_stars === "number") {
+    return locale === "zh-CN" ? `${listing.safety_rating_stars}星` : `${listing.safety_rating_stars}-star`;
+  }
+  if (listing.safety_rating_status === "unrated") {
+    return unratedLabel;
+  }
+  return locale === "zh-CN" ? "暂无" : "N/A";
 }
 
 function ScoreGauge({ score }: { score: number }) {

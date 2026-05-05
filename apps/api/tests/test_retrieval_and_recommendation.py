@@ -140,11 +140,14 @@ class RetrievalParsingTests(unittest.TestCase):
             body_type = "suv"
             fuel_type = "petrol hybrid"
             transmission = "cvt"
+            transmission_maintenance_risk = "low"
             suitability_summary = "Excellent match for family SUV buyers who want efficiency and resale confidence."
             comfort_summary = "Family-friendly seating and easy daily usability."
             space_summary = "Strong rear-seat and cargo space for strollers and weekend trips."
             nvh_summary = "Quiet enough for family commuting."
             maintenance_cost_band = "low"
+            safety_rating_stars = 5
+            safety_rating_status = "rated"
             fuel_consumption_l_per_100km = 6.0
             reliability_summary = "Strong reliability reputation."
 
@@ -165,6 +168,85 @@ class RetrievalParsingTests(unittest.TestCase):
         )
 
         self.assertGreaterEqual(score, 70)
+
+    def test_score_profile_prefers_five_star_and_low_transmission_risk(self) -> None:
+        class StrongProfile:
+            brand = "Toyota"
+            model = "Camry"
+            estimated_price_mid_nzd = 26000
+            estimated_price_min_nzd = 25000
+            body_type = "sedan"
+            fuel_type = "petrol hybrid"
+            transmission = "cvt"
+            transmission_maintenance_risk = "low"
+            suitability_summary = "Strong commuter fit."
+            comfort_summary = "Comfortable daily driver."
+            space_summary = "Enough space for daily use."
+            nvh_summary = "Quiet enough for commuting."
+            maintenance_cost_band = "low"
+            safety_rating_stars = 5
+            safety_rating_status = "rated"
+            fuel_consumption_l_per_100km = 5.0
+            reliability_summary = "Strong reliability reputation."
+
+        class RiskyProfile(StrongProfile):
+            transmission_maintenance_risk = "high"
+            safety_rating_stars = 3
+
+        filters = {
+            "market": "US",
+            "budget_max": 30000,
+            "brands": [],
+            "models": [],
+            "body_type": "sedan",
+            "fuel_type": "hybrid",
+            "transmission": "cvt",
+            "usage": "commute",
+            "priority": "reliability",
+            "limit": 6,
+            "query": "I want a safe and reliable commuter sedan with low maintenance risk.",
+        }
+
+        self.assertGreater(score_profile(StrongProfile(), filters), score_profile(RiskyProfile(), filters))
+
+    def test_score_profile_does_not_penalize_unrated_cn_safety_data(self) -> None:
+        class RatedProfile:
+            brand = "Toyota"
+            model = "Camry"
+            estimated_price_mid_nzd = 200000
+            estimated_price_min_nzd = 190000
+            body_type = "sedan"
+            fuel_type = "petrol hybrid"
+            transmission = "cvt"
+            transmission_maintenance_risk = "low"
+            suitability_summary = "Strong fit for commuting."
+            comfort_summary = "Comfort-oriented cabin."
+            space_summary = "Good space."
+            nvh_summary = "Quiet."
+            maintenance_cost_band = "low"
+            safety_rating_stars = 5
+            safety_rating_status = "rated"
+            fuel_consumption_l_per_100km = 4.8
+            reliability_summary = "Strong reliability reputation."
+
+        class UnratedProfile(RatedProfile):
+            safety_rating_stars = None
+            safety_rating_status = "unrated"
+
+        filters = {
+            "market": "CN",
+            "brands": [],
+            "models": [],
+            "body_type": None,
+            "fuel_type": None,
+            "transmission": None,
+            "usage": "commute",
+            "priority": "low_running_cost",
+            "limit": 6,
+            "query": "我想找一台省心的通勤车。",
+        }
+
+        self.assertEqual(score_profile(RatedProfile(), filters) - score_profile(UnratedProfile(), filters), 8)
 
 
 class CatalogScriptTests(unittest.TestCase):
@@ -427,6 +509,32 @@ class RecommendationRegressionTests(unittest.TestCase):
         self.assertEqual(generated["_overview_status"], "not_requested")
         self.assertIsNone(generated["_overview_drop_reason"])
 
+    def test_deterministic_generator_surfaces_transmission_and_unrated_safety_risks(self) -> None:
+        generator = recommendation_service.DeterministicRecommendationGenerator()
+        retrieval = self._sample_retrieval_response()
+        profile = SimpleNamespace(**vars(retrieval["vehicle_profiles"][0]))
+        profile.profile_id = "dct-1"
+        profile.title = "2019-2021 Demo Dry DCT Crossover"
+        profile.transmission = "dct"
+        profile.transmission_detail = "dry dct"
+        profile.transmission_maintenance_risk = "high"
+        profile.transmission_risk_note = "Dry dual-clutch gearboxes can become expensive if low-speed judder or missed servicing is ignored."
+        profile.safety_rating_stars = None
+        profile.safety_rating_status = "unrated"
+        retrieval["vehicle_profiles"] = [profile]
+        retrieval["chunks"] = []
+
+        generated = generator.generate(
+            RecommendRequest(query="Need a safe and low-risk used crossover.", selected_profile_ids=["dct-1", "crv-1"]),
+            retrieval,
+        )
+
+        recommended = generated["recommended_profiles"][0]
+        self.assertIn("Dry DCT", recommended["powertrain_summary"])
+        self.assertTrue(any(flag["label"] == "Transmission repair risk" for flag in recommended["risk_flags"]))
+        self.assertTrue(any(flag["label"] == "Safety data unavailable" for flag in recommended["risk_flags"]))
+        self.assertTrue(any("cold-start road test" in step for step in recommended["next_steps"]))
+
     def test_openai_generator_missing_api_key_keeps_overview_null_and_marks_fallback(self) -> None:
         generator = recommendation_service.OpenAIRecommendationGenerator(api_key=None)
 
@@ -540,6 +648,9 @@ class RecommendationRegressionTests(unittest.TestCase):
             estimated_price_min_nzd=27000,
             estimated_price_max_nzd=31000,
             transmission="cvt",
+            transmission_detail="e-cvt",
+            transmission_maintenance_risk="low",
+            transmission_risk_note="Toyota hybrid e-CVT hardware is usually low-drama when service history is present.",
             fuel_type="petrol hybrid",
             body_type="suv",
             power_kw=160,
@@ -553,6 +664,9 @@ class RecommendationRegressionTests(unittest.TestCase):
             space_summary="Rear-seat and cargo space work well for family use.",
             nvh_summary="Quiet enough for daily commuting.",
             reliability_summary="Strong reliability reputation.",
+            safety_rating_stars=5,
+            safety_rating_source="NHTSA 5-Star Safety Ratings",
+            safety_rating_status="rated",
             valuation_market="US",
         )
         return {

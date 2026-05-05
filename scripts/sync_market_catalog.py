@@ -127,6 +127,12 @@ def build_outputs(source: dict[str, Any], market: str, snapshot_date: date | Non
             vehicle_profiles.append(
                 {
                     **profile,
+                    "transmission_detail": profile.get("transmission_detail"),
+                    "transmission_maintenance_risk": profile.get("transmission_maintenance_risk"),
+                    "transmission_risk_note": profile.get("transmission_risk_note"),
+                    "safety_rating_stars": profile.get("safety_rating_stars"),
+                    "safety_rating_source": profile.get("safety_rating_source"),
+                    "safety_rating_status": profile.get("safety_rating_status"),
                     "market": item["market"],
                     "market_variant_id": market_variant_id,
                     "brand": item["brand"],

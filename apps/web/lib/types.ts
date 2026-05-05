@@ -1,4 +1,6 @@
 export type Severity = "low" | "medium" | "high";
+export type TransmissionMaintenanceRisk = "low" | "medium" | "high";
+export type SafetyRatingStatus = "rated" | "unrated";
 
 export type VehicleProfile = {
   profile_id: string;
@@ -16,10 +18,16 @@ export type VehicleProfile = {
   engine_description: string;
   displacement_l?: number | null;
   transmission: string;
+  transmission_detail?: string | null;
+  transmission_maintenance_risk?: TransmissionMaintenanceRisk | null;
+  transmission_risk_note?: string | null;
   drivetrain?: string | null;
   fuel_type: string;
   body_type: string;
   seat_count?: number | null;
+  safety_rating_stars?: number | null;
+  safety_rating_source?: string | null;
+  safety_rating_status?: SafetyRatingStatus | null;
   fuel_consumption_l_per_100km?: number | null;
   power_kw?: number | null;
   power_hp?: number | null;

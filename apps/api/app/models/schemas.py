@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
 
 
 class VehicleProfile(BaseModel):
@@ -24,10 +25,16 @@ class VehicleProfile(BaseModel):
     engine_description: str
     displacement_l: float | None = None
     transmission: str
+    transmission_detail: str | None = None
+    transmission_maintenance_risk: Literal["low", "medium", "high"] | None = None
+    transmission_risk_note: str | None = None
     drivetrain: str | None = None
     fuel_type: str
     body_type: str
     seat_count: int | None = None
+    safety_rating_stars: int | None = Field(default=None, ge=1, le=5)
+    safety_rating_source: str | None = None
+    safety_rating_status: Literal["rated", "unrated"] | None = None
     fuel_consumption_l_per_100km: float | None = None
     power_kw: int | None = None
     power_hp: int | None = None

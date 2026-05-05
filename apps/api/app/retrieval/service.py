@@ -505,6 +505,11 @@ def score_profile(profile: VehicleProfileRecord, filters: dict[str, Any]) -> int
     if transmission:
         score += 7 if normalize_text(profile.transmission) == transmission else -4
 
+    safety_weight = 2 if query_mentions_safety(filters.get("query")) else 1
+    transmission_risk_weight = 2 if query_mentions_maintenance_risk(filters.get("query")) else 1
+    score += safety_score_delta(profile) * safety_weight
+    score += transmission_risk_delta(profile) * transmission_risk_weight
+
     score += usage_fit_score(profile, filters.get("usage"))
     score += priority_fit_score(profile, filters.get("priority"))
 
@@ -591,6 +596,41 @@ def select_diverse_profiles(profiles: list[VehicleProfileRecord], limit: int) ->
         if len(selected) >= limit:
             break
     return selected
+
+
+def safety_score_delta(profile: VehicleProfileRecord) -> int:
+    if (profile.safety_rating_status or "").lower() == "unrated":
+        return 0
+    if profile.safety_rating_stars is None:
+        return 0
+    if profile.safety_rating_stars >= 5:
+        return 8
+    if profile.safety_rating_stars == 4:
+        return 4
+    return -6
+
+
+def transmission_risk_delta(profile: VehicleProfileRecord) -> int:
+    risk = normalize_text(profile.transmission_maintenance_risk)
+    if risk == "low":
+        return 5
+    if risk == "high":
+        return -8
+    return 0
+
+
+def query_mentions_safety(query: Any) -> bool:
+    text = str(query or "")
+    normalized = normalize_text(text)
+    return any(token in normalized for token in ("safety", "safe", "safer")) or "安全" in text
+
+
+def query_mentions_maintenance_risk(query: Any) -> bool:
+    text = str(query or "")
+    normalized = normalize_text(text)
+    return any(token in normalized for token in ("reliable", "reliability", "maintenance", "repair", "gearbox", "transmission")) or any(
+        token in text for token in ("省心", "维修", "变速箱")
+    )
 
 
 def model_pairs(models: list[str]) -> list[tuple[str, str]]:

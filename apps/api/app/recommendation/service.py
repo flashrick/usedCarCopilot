@@ -234,6 +234,7 @@ class OpenAIRecommendationGenerator:
                                 "Return grounded JSON only. Keep the same profile_id order, titles, match_score values, "
                                 "and evidence_ids from the draft. Do not invent profiles or citations. "
                                 "Rewrite reasons, trade-offs, risks, valuation wording, next steps, and the overview only when the supplied evidence supports it. "
+                                "Do not ignore transmission maintenance risk or safety rating evidence when it is present in the draft. "
                                 "Do not mention network search, web search, realtime web data, or online review scraping."
                             ),
                         }
@@ -363,6 +364,7 @@ class OpenAICompatibleChatRecommendationGenerator:
                         "Keep the same profile_id order, titles, match_score values, and evidence_ids from the draft. "
                         "Do not invent profiles, citations, or evidence ids. "
                         "Rewrite reasons, trade-offs, valuation commentary, next steps, and the overview only when supplied evidence supports it. "
+                        "Do not ignore transmission maintenance risk or safety rating evidence when it is present in the draft. "
                         "Do not mention network search, web search, realtime web data, or online review scraping."
                     ),
                 },
@@ -607,7 +609,8 @@ def build_query_summary(query: str | None, filters: dict[str, Any]) -> dict[str,
 def build_powertrain_summary(profile: VehicleProfileRecord) -> str:
     power = f"{profile.power_kw}kW" if profile.power_kw else (f"{profile.power_hp}hp" if profile.power_hp else "power output not stated")
     displacement = f"{profile.displacement_l:.1f}L" if profile.displacement_l else profile.engine_description
-    return f"{displacement} · {profile.transmission.upper()} · {profile.fuel_type.title()} · {power}"
+    transmission_label = format_transmission_label(profile.transmission_detail or profile.transmission)
+    return f"{displacement} · {transmission_label} · {profile.fuel_type.title()} · {power}"
 
 
 def build_reasons(profile: VehicleProfileRecord, filters: dict[str, Any]) -> list[str]:
@@ -616,6 +619,10 @@ def build_reasons(profile: VehicleProfileRecord, filters: dict[str, Any]) -> lis
         reasons.append("Estimated market midpoint stays inside the current budget target.")
     if filters.get("priority") == "low_running_cost" and (profile.fuel_consumption_l_per_100km or 99) <= 6.0:
         reasons.append("Fuel economy is favorable for a running-cost-sensitive buyer.")
+    if (profile.safety_rating_status or "").lower() == "rated" and profile.safety_rating_stars == 5:
+        reasons.append("This profile carries a 5-star official safety rating, which supports family and risk-sensitive use cases.")
+    if normalize(profile.transmission_maintenance_risk) == "low":
+        reasons.append("Its transmission setup has a lower maintenance-risk profile than more repair-sensitive alternatives.")
     if filters.get("priority") == "premium_feel":
         reasons.append(profile.nvh_summary or "This profile leans more refined than the cheaper mainstream alternatives.")
     else:
@@ -633,6 +640,15 @@ def build_trade_offs(profile: VehicleProfileRecord) -> list[str]:
         trade_offs.append("Running costs will be higher than the most efficient hatchback options in the shortlist.")
     if profile.maintenance_cost_band in {"medium_high", "high"}:
         trade_offs.append("This version needs stronger maintenance evidence to justify its premium or complexity.")
+    if normalize(profile.transmission_maintenance_risk) == "high":
+        trade_offs.append(
+            profile.transmission_risk_note
+            or "This transmission type can become expensive when wear, heat, or poor service history are ignored."
+        )
+    if (profile.safety_rating_status or "").lower() == "rated" and profile.safety_rating_stars == 4:
+        trade_offs.append("The official safety result is solid rather than class-leading, so equipment and crash-history checks still matter.")
+    if (profile.safety_rating_status or "").lower() == "unrated":
+        trade_offs.append("No official safety star result is stored for this market profile, so safety equipment should be checked manually.")
     trade_offs.append(profile.space_summary or "Always match cabin and cargo space to the real use case, not just the body style.")
     return dedupe_non_empty(trade_offs)
 
@@ -653,6 +669,16 @@ def build_risk_flags(
                 "evidence_ids": chunk_evidence_ids or [f"profile:{profile.profile_id}"],
             }
         )
+    if normalize(profile.transmission_maintenance_risk) == "high":
+        flags.append(
+            {
+                "label": "Transmission repair risk",
+                "severity": "high",
+                "reason": profile.transmission_risk_note
+                or "This transmission type needs stronger inspection and service proof because repair costs can escalate quickly once symptoms appear.",
+                "evidence_ids": chunk_evidence_ids or [f"profile:{profile.profile_id}"],
+            }
+        )
     if "hybrid" in (profile.fuel_type or "").lower():
         flags.append(
             {
@@ -660,6 +686,35 @@ def build_risk_flags(
                 "severity": "medium",
                 "reason": "Battery health, warning lights, and hybrid maintenance history should be verified before treating fuel savings as guaranteed value.",
                 "evidence_ids": chunk_evidence_ids or [f"profile:{profile.profile_id}"],
+            }
+        )
+    safety_status = (profile.safety_rating_status or "").lower()
+    if safety_status == "rated" and profile.safety_rating_stars is not None:
+        if profile.safety_rating_stars <= 3:
+            flags.append(
+                {
+                    "label": "Below-target safety rating",
+                    "severity": "high",
+                    "reason": f"This profile is backed by only a {profile.safety_rating_stars}-star official safety result, so crash protection and safety equipment need extra scrutiny.",
+                    "evidence_ids": [f"profile:{profile.profile_id}"],
+                }
+            )
+        elif profile.safety_rating_stars == 4:
+            flags.append(
+                {
+                    "label": "Safety rating check",
+                    "severity": "medium",
+                    "reason": "The official safety result is acceptable rather than best-in-class, so verify airbags, ADAS coverage, and crash-repair history carefully.",
+                    "evidence_ids": [f"profile:{profile.profile_id}"],
+                }
+            )
+    elif safety_status == "unrated":
+        flags.append(
+            {
+                "label": "Safety data unavailable",
+                "severity": "low",
+                "reason": "No official safety star result is stored for this market profile, so active and passive safety equipment should be checked manually.",
+                "evidence_ids": [f"profile:{profile.profile_id}"],
             }
         )
     if profile.body_type == "suv":
@@ -702,6 +757,12 @@ def build_next_steps(profile: VehicleProfileRecord, risk_flags: list[dict[str, A
     ]
     if any(flag["label"] == "Hybrid system check" for flag in risk_flags):
         steps.append("Prioritize hybrid battery health, warning-light scan, and cooling-system service evidence.")
+    if any(flag["label"] == "Transmission repair risk" for flag in risk_flags):
+        steps.append("Insist on a cold-start road test, gearbox fault scan, and documented transmission servicing before committing.")
+    if any(flag["label"] in {"Below-target safety rating", "Safety rating check"} for flag in risk_flags):
+        steps.append("Verify airbags, ADAS features, and any prior crash repairs against the official safety result before shortlisting a real car.")
+    if any(flag["label"] == "Safety data unavailable" for flag in risk_flags):
+        steps.append("Because no official safety star result is stored here, manually verify airbags, braking aids, and crash-history evidence.")
     return dedupe_non_empty(steps)
 
 
@@ -759,13 +820,20 @@ def market_currency_code(market: str | None) -> str:
 
 def add_profile_evidence(profile: VehicleProfileRecord, evidence: dict[str, dict[str, str]]) -> str:
     evidence_id = f"profile:{profile.profile_id}"
+    transmission_summary = format_transmission_label(profile.transmission_detail or profile.transmission)
+    safety_summary = "official safety rating unavailable"
+    if (profile.safety_rating_status or "").lower() == "rated" and profile.safety_rating_stars is not None:
+        safety_summary = f"{profile.safety_rating_stars}-star safety rating"
     evidence.setdefault(
         evidence_id,
         {
             "id": evidence_id,
             "source_type": "vehicle_profile",
             "title": profile.title,
-            "snippet": f"{profile.engine_description}; {profile.suitability_summary or profile.comfort_summary or profile.space_summary or profile.reliability_summary or ''}",
+            "snippet": (
+                f"{profile.engine_description}; {transmission_summary}; {safety_summary}; "
+                f"{profile.suitability_summary or profile.comfort_summary or profile.space_summary or profile.reliability_summary or ''}"
+            ),
         },
     )
     return evidence_id
@@ -997,8 +1065,29 @@ def extract_chat_completion_text(response: dict[str, Any]) -> str | None:
     return content if isinstance(content, str) else None
 
 
-def normalize(value: str) -> str:
-    return value.strip().lower()
+def normalize(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def format_transmission_label(value: str | None) -> str:
+    normalized = normalize(value or "").replace("-", "_").replace(" ", "_")
+    labels = {
+        "automatic": "Automatic",
+        "single_speed_automatic": "Single-speed Automatic",
+        "cvt": "CVT",
+        "e_cvt": "E-CVT",
+        "dct": "DCT",
+        "dry_dct": "Dry DCT",
+        "wet_dct": "Wet DCT",
+        "manual": "Manual",
+        "4at": "4AT",
+        "5at": "5AT",
+        "6at": "6AT",
+        "8at": "8AT",
+        "5mt": "5MT",
+        "6mt": "6MT",
+    }
+    return labels.get(normalized, (value or "Transmission not stated").title())
 
 
 def trim(value: str, length: int) -> str:

@@ -139,6 +139,13 @@ export type RecommendationEvidence = {
   snippet: string;
 };
 
+export type RecommendationOverview = {
+  recommended_profile_id: string;
+  recommended_title: string;
+  summary: string;
+  evidence_ids: string[];
+};
+
 export type RecommendedProfile = {
   profile_id: string;
   title: string;
@@ -159,6 +166,7 @@ export type RecommendRequest = {
 
 export type RecommendResponse = {
   query_summary: QuerySummary;
+  recommendation_overview?: RecommendationOverview | null;
   recommended_profiles: RecommendedProfile[];
   evidence: RecommendationEvidence[];
   debug: Record<string, unknown>;

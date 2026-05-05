@@ -147,6 +147,13 @@ class RecommendationEvidence(BaseModel):
     snippet: str
 
 
+class RecommendationOverview(BaseModel):
+    recommended_profile_id: str
+    recommended_title: str
+    summary: str
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
 class RecommendedProfile(BaseModel):
     profile_id: str
     title: str
@@ -167,6 +174,7 @@ class RecommendRequest(BaseModel):
 
 class RecommendResponse(BaseModel):
     query_summary: QuerySummary
+    recommendation_overview: RecommendationOverview | None = None
     recommended_profiles: list[RecommendedProfile]
     evidence: list[RecommendationEvidence]
     debug: dict[str, Any]

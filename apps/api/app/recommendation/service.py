@@ -82,6 +82,17 @@ RECOMMENDATION_OUTPUT_SCHEMA: dict[str, Any] = {
                 },
             },
         },
+        "recommendation_overview": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["recommended_profile_id", "recommended_title", "summary", "evidence_ids"],
+            "properties": {
+                "recommended_profile_id": {"type": "string"},
+                "recommended_title": {"type": "string"},
+                "summary": {"type": "string"},
+                "evidence_ids": {"type": "array", "items": {"type": "string"}},
+            },
+        },
     },
 }
 
@@ -141,8 +152,10 @@ class DeterministicRecommendationGenerator:
 
         return {
             "query_summary": build_query_summary(request.query, filters),
+            "recommendation_overview": None,
             "recommended_profiles": ranked_profiles,
             "evidence": list(evidence.values()),
+            "_overview_draft": build_recommendation_overview_draft(ranked_profiles, filters),
         }
 
 
@@ -194,9 +207,11 @@ class OpenAIRecommendationGenerator:
                             "type": "input_text",
                             "text": (
                                 "You are a used-car variant decision support generator. "
+                                "Include recommendation_overview that recommends the best overall shortlist option using the first ranked profile only. "
                                 "Return grounded JSON only. Keep the same profile_id order, titles, match_score values, "
                                 "and evidence_ids from the draft. Do not invent profiles or citations. "
-                                "Rewrite reasons, trade-offs, risks, valuation wording, and next steps only when the supplied evidence supports it."
+                                "Rewrite reasons, trade-offs, risks, valuation wording, next steps, and the overview only when the supplied evidence supports it. "
+                                "Do not mention network search, web search, realtime web data, or online review scraping."
                             ),
                         }
                     ],
@@ -211,6 +226,7 @@ class OpenAIRecommendationGenerator:
                                     "query": request.query,
                                     "filters": retrieval_response.get("applied_filters", {}),
                                     "draft_recommendation": draft,
+                                    "draft_overview": draft.get("_overview_draft"),
                                     "available_evidence": draft.get("evidence", []),
                                 },
                                 ensure_ascii=True,
@@ -302,10 +318,12 @@ class OpenAICompatibleChatRecommendationGenerator:
                     "role": "system",
                     "content": (
                         "You are a used-car variant decision support generator. Return valid JSON only. "
-                        "The JSON object must contain query_summary and recommended_profiles. "
+                        "The JSON object must contain query_summary and recommended_profiles, and should include recommendation_overview. "
+                        "The overview must recommend the first ranked profile only. "
                         "Keep the same profile_id order, titles, match_score values, and evidence_ids from the draft. "
                         "Do not invent profiles, citations, or evidence ids. "
-                        "Rewrite reasons, trade-offs, valuation commentary, and next steps only when supplied evidence supports it."
+                        "Rewrite reasons, trade-offs, valuation commentary, next steps, and the overview only when supplied evidence supports it. "
+                        "Do not mention network search, web search, realtime web data, or online review scraping."
                     ),
                 },
                 {
@@ -315,6 +333,7 @@ class OpenAICompatibleChatRecommendationGenerator:
                             "query": request.query,
                             "filters": retrieval_response.get("applied_filters", {}),
                             "draft_recommendation": draft,
+                            "draft_overview": draft.get("_overview_draft"),
                             "available_evidence": draft.get("evidence", []),
                         },
                         ensure_ascii=True,
@@ -385,6 +404,7 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
 
     return {
         "query_summary": generated["query_summary"],
+        "recommendation_overview": generated.get("recommendation_overview"),
         "recommended_profiles": generated["recommended_profiles"],
         "evidence": generated["evidence"],
         "debug": {
@@ -638,6 +658,38 @@ def build_next_steps(profile: VehicleProfileRecord, risk_flags: list[dict[str, A
     return dedupe_non_empty(steps)
 
 
+def build_recommendation_overview_draft(
+    ranked_profiles: list[dict[str, Any]],
+    filters: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not ranked_profiles:
+        return None
+
+    best_profile = ranked_profiles[0]
+    reasons = non_empty_strings(best_profile.get("why_it_matches"))
+    trade_offs = non_empty_strings(best_profile.get("trade_offs"))
+    risk_flags = list(best_profile.get("risk_flags", []))
+    summary_parts = [
+        f"{best_profile['title']} is the strongest overall match in this shortlist.",
+    ]
+    if reasons:
+        summary_parts.append(reasons[0])
+    usage = str(filters.get("usage") or "").replace("_", " ").strip()
+    if usage:
+        summary_parts.append(f"It stays aligned with the shortlist's main {usage} use case.")
+    if trade_offs:
+        summary_parts.append(f"Main trade-off: {trade_offs[0]}")
+    if risk_flags:
+        summary_parts.append(f"Key watch-out: {risk_flags[0].get('reason', '')}")
+
+    return {
+        "recommended_profile_id": best_profile["profile_id"],
+        "recommended_title": best_profile["title"],
+        "summary": " ".join(part.strip() for part in summary_parts if part and part.strip()),
+        "evidence_ids": list(best_profile.get("evidence_ids", []))[:3],
+    }
+
+
 def format_budget_summary(budget: Any, market: str) -> str:
     if not isinstance(budget, int):
         return "Flexible budget"
@@ -741,14 +793,54 @@ def validate_llm_recommendation_payload(generated: dict[str, Any], draft: dict[s
     if not isinstance(query_summary, dict):
         query_summary = draft["query_summary"]
 
+    validated_overview = validate_llm_recommendation_overview(
+        generated.get("recommendation_overview"),
+        validated_profiles,
+        evidence,
+    )
+
     return {
         "query_summary": {
             "budget": str(query_summary.get("budget") or draft["query_summary"]["budget"]),
             "usage": str(query_summary.get("usage") or draft["query_summary"]["usage"]),
             "preferences": non_empty_strings(query_summary.get("preferences")) or draft["query_summary"]["preferences"],
         },
+        "recommendation_overview": validated_overview,
         "recommended_profiles": validated_profiles,
         "evidence": evidence,
+    }
+
+
+def validate_llm_recommendation_overview(
+    generated_overview: Any,
+    validated_profiles: list[dict[str, Any]],
+    evidence: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not validated_profiles or not isinstance(generated_overview, dict):
+        return None
+
+    first_profile = validated_profiles[0]
+    evidence_ids = {item["id"] for item in evidence}
+    summary = str(generated_overview.get("summary", "")).strip()
+    if not summary or contains_disallowed_overview_language(summary):
+        return None
+
+    recommended_profile_id = str(generated_overview.get("recommended_profile_id", "")).strip()
+    recommended_title = str(generated_overview.get("recommended_title", "")).strip()
+    if recommended_profile_id != first_profile["profile_id"]:
+        return None
+    if recommended_title != first_profile["title"]:
+        return None
+
+    overview_evidence_ids = non_empty_strings(generated_overview.get("evidence_ids"))
+    if not overview_evidence_ids or not set(overview_evidence_ids).issubset(evidence_ids):
+        return None
+
+    return {
+        "recommended_profile_id": recommended_profile_id,
+        "recommended_title": recommended_title,
+        "summary": summary,
+        "evidence_ids": overview_evidence_ids,
     }
 
 
@@ -777,6 +869,23 @@ def dedupe_non_empty(values: list[str]) -> list[str]:
         if normalized and normalized not in deduped:
             deduped.append(normalized)
     return deduped
+
+
+def contains_disallowed_overview_language(value: str) -> bool:
+    normalized = value.lower()
+    disallowed_terms = (
+        "network search",
+        "web search",
+        "realtime web",
+        "real-time web",
+        "online review scraping",
+        "live web data",
+        "联网搜索",
+        "网络搜索",
+        "实时口碑",
+        "联网结果",
+    )
+    return any(term in normalized for term in disallowed_terms)
 
 
 def extract_response_text(response: dict[str, Any]) -> str | None:

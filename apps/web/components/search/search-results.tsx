@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowRight,
   BadgeCheck,
   CarFront,
@@ -40,6 +41,16 @@ export function SearchResults({
 }: SearchResultsProps) {
   const { copy, locale } = useLocale();
   const selectedSet = new Set(selectedProfileIds);
+  const recommendationProvider =
+    typeof recommendation?.debug?.recommendation_provider === "string" ? recommendation.debug.recommendation_provider : null;
+  const generationSource = typeof recommendation?.debug?.generation_source === "string" ? recommendation.debug.generation_source : null;
+  const showOverviewFallback = Boolean(
+    recommendation &&
+      !recommendation.recommendation_overview &&
+      recommendationProvider &&
+      recommendationProvider !== "deterministic" &&
+      generationSource === "deterministic_fallback",
+  );
 
   return (
     <>
@@ -94,6 +105,36 @@ export function SearchResults({
 
         <aside id="advice" className="grid content-start gap-4">
           <SectionTitle eyebrow={copy.searchResults.aiAdvice} title={copy.searchResults.aiAdviceTitle} />
+          {recommendation?.recommendation_overview ? (
+            <article className="rounded-lg border border-[#00a8ff]/30 bg-[linear-gradient(135deg,rgba(0,168,255,0.18),rgba(0,229,255,0.08))] p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded bg-[#0d2233] px-2 py-1 text-xs font-semibold text-[#8fd7ff]">
+                  {copy.searchResults.overviewEyebrow}
+                </span>
+                <span className="rounded bg-[#ccff00] px-2 py-1 text-xs font-bold text-[#161e00]">
+                  {copy.searchResults.bestMatchBadge}
+                </span>
+              </div>
+              <div className="mt-3 text-sm font-semibold text-white">{copy.searchResults.overviewTitle}</div>
+              <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-white">
+                {recommendation.recommendation_overview.recommended_title}
+              </h3>
+              <p className="mt-2 text-sm leading-7 text-[#d8e9f7]">{recommendation.recommendation_overview.summary}</p>
+              <div className="mt-4 inline-flex items-center rounded border border-white/10 bg-black/15 px-3 py-2 text-xs text-[#c6d6e4]">
+                {formatTemplate(copy.searchResults.overviewEvidenceCount, {
+                  count: recommendation.recommendation_overview.evidence_ids.length,
+                })}
+              </div>
+            </article>
+          ) : null}
+          {showOverviewFallback ? (
+            <div className="rounded-lg border border-[#ffcc66]/40 bg-[#ffcc66]/10 p-4 text-sm text-[#ffd68a]">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{copy.searchResults.overviewFallbackNotice}</span>
+              </div>
+            </div>
+          ) : null}
           {recommendation?.recommended_profiles.length ? (
             recommendation.recommended_profiles.map((car, index) => (
               <article key={car.profile_id} className="rounded-lg border border-white/10 bg-[#1a1c1f] p-4">

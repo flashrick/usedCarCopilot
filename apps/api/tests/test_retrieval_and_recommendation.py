@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 API_ROOT = Path(__file__).resolve().parents[1]
@@ -317,3 +318,220 @@ class RecommendationRegressionTests(unittest.TestCase):
     def test_recommendation_generator_rejects_unknown_provider(self) -> None:
         with self.assertRaises(ValueError):
             recommendation_service.get_recommendation_generator("unsupported")
+
+    def test_validate_llm_recommendation_payload_keeps_valid_overview(self) -> None:
+        draft = self._recommendation_draft()
+        generated = self._generated_payload(
+            draft,
+            {
+                "recommended_profile_id": "rav4-1",
+                "recommended_title": "2020-2022 Toyota RAV4 Hybrid XLE",
+                "summary": (
+                    "2020-2022 Toyota RAV4 Hybrid XLE is the best overall pick in this shortlist because it balances "
+                    "daily running costs, family-friendly space, and a strong reliability story better than the alternatives."
+                ),
+                "evidence_ids": ["profile:rav4-1", "chunk:k1"],
+            },
+        )
+
+        validated = recommendation_service.validate_llm_recommendation_payload(generated, draft)
+
+        self.assertEqual(validated["recommendation_overview"]["recommended_profile_id"], "rav4-1")
+        self.assertEqual(validated["recommendation_overview"]["evidence_ids"], ["profile:rav4-1", "chunk:k1"])
+
+    def test_validate_llm_recommendation_payload_discards_invalid_overview(self) -> None:
+        draft = self._recommendation_draft()
+        invalid_overviews = [
+            {
+                "recommended_profile_id": "crv-1",
+                "recommended_title": "2020-2022 Toyota RAV4 Hybrid XLE",
+                "summary": "Still tries to recommend the wrong profile id.",
+                "evidence_ids": ["profile:rav4-1"],
+            },
+            {
+                "recommended_profile_id": "rav4-1",
+                "recommended_title": "2020-2022 Honda CR-V EX",
+                "summary": "Still tries to recommend the wrong title.",
+                "evidence_ids": ["profile:rav4-1"],
+            },
+            {
+                "recommended_profile_id": "rav4-1",
+                "recommended_title": "2020-2022 Toyota RAV4 Hybrid XLE",
+                "summary": "",
+                "evidence_ids": ["profile:rav4-1"],
+            },
+            {
+                "recommended_profile_id": "rav4-1",
+                "recommended_title": "2020-2022 Toyota RAV4 Hybrid XLE",
+                "summary": "This recommendation comes from web search and shortlist evidence.",
+                "evidence_ids": ["profile:rav4-1"],
+            },
+            {
+                "recommended_profile_id": "rav4-1",
+                "recommended_title": "2020-2022 Toyota RAV4 Hybrid XLE",
+                "summary": "The RAV4 stays ahead on efficiency, family space, and lower-drama ownership risk.",
+                "evidence_ids": ["missing:evidence"],
+            },
+        ]
+
+        for overview in invalid_overviews:
+            with self.subTest(overview=overview):
+                generated = self._generated_payload(draft, overview)
+                validated = recommendation_service.validate_llm_recommendation_payload(generated, draft)
+                self.assertIsNone(validated["recommendation_overview"])
+                self.assertEqual(validated["recommended_profiles"][0]["profile_id"], "rav4-1")
+
+    def test_deterministic_generator_returns_null_overview(self) -> None:
+        generator = recommendation_service.DeterministicRecommendationGenerator()
+
+        generated = generator.generate(
+            RecommendRequest(query="Need a practical hybrid SUV.", selected_profile_ids=["rav4-1", "crv-1"]),
+            self._sample_retrieval_response(),
+        )
+
+        self.assertIsNone(generated["recommendation_overview"])
+        self.assertEqual(generated["_overview_draft"]["recommended_profile_id"], "rav4-1")
+
+    def test_openai_generator_missing_api_key_keeps_overview_null_and_marks_fallback(self) -> None:
+        generator = recommendation_service.OpenAIRecommendationGenerator(api_key=None)
+
+        generated = generator.generate(
+            RecommendRequest(query="Need a practical hybrid SUV.", selected_profile_ids=["rav4-1", "crv-1"]),
+            self._sample_retrieval_response(),
+        )
+
+        self.assertIsNone(generated["recommendation_overview"])
+        self.assertEqual(generated["_generation_metadata"]["source"], "deterministic_fallback")
+        self.assertEqual(generated["_generation_metadata"]["fallback_reason"], "missing_openai_api_key")
+
+    @staticmethod
+    def _generated_payload(draft: dict[str, object], overview: dict[str, object]) -> dict[str, object]:
+        generated_profiles = []
+        for profile in draft["recommended_profiles"]:
+            generated_profiles.append(
+                {
+                    "profile_id": profile["profile_id"],
+                    "title": profile["title"],
+                    "match_score": profile["match_score"],
+                    "powertrain_summary": profile["powertrain_summary"],
+                    "why_it_matches": list(profile["why_it_matches"]),
+                    "trade_offs": list(profile["trade_offs"]),
+                    "risk_flags": [dict(flag) for flag in profile["risk_flags"]],
+                    "valuation_summary": profile["valuation_summary"],
+                    "evidence_ids": list(profile["evidence_ids"]),
+                    "next_steps": list(profile["next_steps"]),
+                }
+            )
+        return {
+            "query_summary": dict(draft["query_summary"]),
+            "recommendation_overview": overview,
+            "recommended_profiles": generated_profiles,
+        }
+
+    @staticmethod
+    def _recommendation_draft() -> dict[str, object]:
+        return {
+            "query_summary": {"budget": "Under $30,000", "usage": "family", "preferences": ["hybrid", "low running cost"]},
+            "recommendation_overview": None,
+            "recommended_profiles": [
+                {
+                    "profile_id": "rav4-1",
+                    "title": "2020-2022 Toyota RAV4 Hybrid XLE",
+                    "match_score": 91,
+                    "powertrain_summary": "2.5L · CVT · Petrol Hybrid · 160kW",
+                    "why_it_matches": [
+                        "Strong fit for a family buyer who wants fuel savings and easy resale confidence.",
+                        "Estimated market midpoint stays inside the current budget target.",
+                    ],
+                    "trade_offs": [
+                        "SUV practicality comes with higher tyre, brake, and fuel exposure than a small hatchback.",
+                    ],
+                    "risk_flags": [
+                        {
+                            "label": "Hybrid system check",
+                            "severity": "medium",
+                            "reason": "Battery health and hybrid maintenance history should be verified before purchase.",
+                            "evidence_ids": ["chunk:k1"],
+                        }
+                    ],
+                    "valuation_summary": "Estimated US fair range: $27,000-$31,000 (midpoint $29,000) for a good-condition used example.",
+                    "evidence_ids": ["profile:rav4-1", "chunk:k1"],
+                    "next_steps": ["Confirm service history before making an offer."],
+                },
+                {
+                    "profile_id": "crv-1",
+                    "title": "2020-2022 Honda CR-V EX",
+                    "match_score": 84,
+                    "powertrain_summary": "1.5L · CVT · Petrol · 140kW",
+                    "why_it_matches": ["Comfort and daily usability still fit the intended family use."],
+                    "trade_offs": ["Running costs will be higher than the most efficient shortlist options."],
+                    "risk_flags": [
+                        {
+                            "label": "Routine used-car checks",
+                            "severity": "low",
+                            "reason": "Service history and body condition still matter.",
+                            "evidence_ids": ["profile:crv-1"],
+                        }
+                    ],
+                    "valuation_summary": "Estimated US fair range: $24,000-$28,000 (midpoint $26,000) for a good-condition used example.",
+                    "evidence_ids": ["profile:crv-1"],
+                    "next_steps": ["Use the valuation band as a negotiation anchor."],
+                },
+            ],
+            "evidence": [
+                {"id": "profile:rav4-1", "source_type": "vehicle_profile", "title": "2020-2022 Toyota RAV4 Hybrid XLE", "snippet": "Profile summary."},
+                {"id": "chunk:k1", "source_type": "review", "title": "RAV4 ownership notes", "snippet": "Hybrid ownership note."},
+                {"id": "profile:crv-1", "source_type": "vehicle_profile", "title": "2020-2022 Honda CR-V EX", "snippet": "Profile summary."},
+            ],
+        }
+
+    @staticmethod
+    def _sample_retrieval_response() -> dict[str, object]:
+        profile = SimpleNamespace(
+            profile_id="rav4-1",
+            title="2020-2022 Toyota RAV4 Hybrid XLE",
+            brand="Toyota",
+            model="RAV4",
+            market="US",
+            estimated_price_mid_nzd=29000,
+            estimated_price_min_nzd=27000,
+            estimated_price_max_nzd=31000,
+            transmission="cvt",
+            fuel_type="petrol hybrid",
+            body_type="suv",
+            power_kw=160,
+            power_hp=None,
+            displacement_l=2.5,
+            engine_description="2.5L hybrid",
+            fuel_consumption_l_per_100km=5.8,
+            maintenance_cost_band="medium",
+            suitability_summary="Strong fit for a family buyer who wants fuel savings and resale confidence.",
+            comfort_summary="Comfort and usability align with family commuting.",
+            space_summary="Rear-seat and cargo space work well for family use.",
+            nvh_summary="Quiet enough for daily commuting.",
+            reliability_summary="Strong reliability reputation.",
+            valuation_market="US",
+        )
+        return {
+            "applied_filters": {
+                "market": "US",
+                "budget_max": 30000,
+                "usage": "family",
+                "priority": "low_running_cost",
+                "limit": 4,
+                "selected_profile_ids": ["rav4-1", "crv-1"],
+            },
+            "vehicle_profiles": [profile],
+            "chunks": [
+                {
+                    "chunk_id": "k1",
+                    "profile_id": "rav4-1",
+                    "brand": "Toyota",
+                    "model": "RAV4",
+                    "source_type": "review",
+                    "source_title": "RAV4 ownership notes",
+                    "text": "Owners praise the fuel economy but still recommend checking battery history.",
+                }
+            ],
+            "debug": {},
+        }

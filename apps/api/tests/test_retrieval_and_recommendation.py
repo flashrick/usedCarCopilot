@@ -338,6 +338,8 @@ class RecommendationRegressionTests(unittest.TestCase):
 
         self.assertEqual(validated["recommendation_overview"]["recommended_profile_id"], "rav4-1")
         self.assertEqual(validated["recommendation_overview"]["evidence_ids"], ["profile:rav4-1", "chunk:k1"])
+        self.assertEqual(validated["_overview_status"], "generated")
+        self.assertIsNone(validated["_overview_drop_reason"])
 
     def test_validate_llm_recommendation_payload_discards_invalid_overview(self) -> None:
         draft = self._recommendation_draft()
@@ -380,6 +382,8 @@ class RecommendationRegressionTests(unittest.TestCase):
                 validated = recommendation_service.validate_llm_recommendation_payload(generated, draft)
                 self.assertIsNone(validated["recommendation_overview"])
                 self.assertEqual(validated["recommended_profiles"][0]["profile_id"], "rav4-1")
+                self.assertIn(validated["_overview_status"], {"missing_from_provider", "dropped_invalid"})
+                self.assertIsNotNone(validated["_overview_drop_reason"])
 
     def test_deterministic_generator_returns_null_overview(self) -> None:
         generator = recommendation_service.DeterministicRecommendationGenerator()
@@ -391,6 +395,8 @@ class RecommendationRegressionTests(unittest.TestCase):
 
         self.assertIsNone(generated["recommendation_overview"])
         self.assertEqual(generated["_overview_draft"]["recommended_profile_id"], "rav4-1")
+        self.assertEqual(generated["_overview_status"], "not_requested")
+        self.assertIsNone(generated["_overview_drop_reason"])
 
     def test_openai_generator_missing_api_key_keeps_overview_null_and_marks_fallback(self) -> None:
         generator = recommendation_service.OpenAIRecommendationGenerator(api_key=None)
@@ -403,6 +409,8 @@ class RecommendationRegressionTests(unittest.TestCase):
         self.assertIsNone(generated["recommendation_overview"])
         self.assertEqual(generated["_generation_metadata"]["source"], "deterministic_fallback")
         self.assertEqual(generated["_generation_metadata"]["fallback_reason"], "missing_openai_api_key")
+        self.assertEqual(generated["_generation_metadata"]["overview_status"], "provider_fallback")
+        self.assertEqual(generated["_generation_metadata"]["overview_drop_reason"], "missing_openai_api_key")
 
     @staticmethod
     def _generated_payload(draft: dict[str, object], overview: dict[str, object]) -> dict[str, object]:

@@ -131,6 +131,8 @@ const copy = {
       overviewEvidenceCount: "{count} supporting citations linked to this summary",
       overviewFallbackNotice:
         "The selected AI provider could not produce the opening summary, so only the base recommendation cards are shown for this run.",
+      overviewUnavailableNotice:
+        "The selected AI provider generated the recommendation cards, but the opening summary was unavailable for this run.",
       selectedCount: "{count} shortlisted profiles selected",
       selectionHint: "Choose 2-4 concrete vehicle profiles from the shortlist, then request AI advice for the final decision.",
       getAdvice: "Get AI advice",
@@ -420,6 +422,7 @@ const copy = {
       overviewTitle: "基于你选中的 shortlist 和当前检索证据的最佳总推荐",
       overviewEvidenceCount: "这段总结关联了 {count} 条支持证据",
       overviewFallbackNotice: "当前选择的 AI provider 没有成功生成开头总述，本次仅展示基础推荐结果。",
+      overviewUnavailableNotice: "当前选择的 AI provider 已生成推荐卡片，但这次没有拿到可展示的开头总述。",
       selectedCount: "已选择 {count} 个候选画像",
       selectionHint: "先从 shortlist 中选 2-4 个具体车型画像，再请求 AI 给出最终判断。",
       getAdvice: "获取 AI 建议",

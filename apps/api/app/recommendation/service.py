@@ -156,6 +156,8 @@ class DeterministicRecommendationGenerator:
             "recommended_profiles": ranked_profiles,
             "evidence": list(evidence.values()),
             "_overview_draft": build_recommendation_overview_draft(ranked_profiles, filters),
+            "_overview_status": "not_requested",
+            "_overview_drop_reason": None,
         }
 
 
@@ -178,7 +180,15 @@ class OpenAIRecommendationGenerator:
     def generate(self, request: RecommendRequest, retrieval_response: dict[str, Any]) -> dict[str, Any]:
         draft = self.fallback_generator.generate(request, retrieval_response)
         if not self.api_key:
-            return with_generation_metadata(draft, {"source": "deterministic_fallback", "fallback_reason": "missing_openai_api_key"})
+            return with_generation_metadata(
+                draft,
+                {
+                    "source": "deterministic_fallback",
+                    "fallback_reason": "missing_openai_api_key",
+                    "overview_status": "provider_fallback",
+                    "overview_drop_reason": "missing_openai_api_key",
+                },
+            )
 
         try:
             generated = self._generate_with_openai(request, retrieval_response, draft)
@@ -186,10 +196,22 @@ class OpenAIRecommendationGenerator:
         except Exception as exc:
             return with_generation_metadata(
                 draft,
-                {"source": "deterministic_fallback", "fallback_reason": f"{type(exc).__name__}: {exc}"},
+                {
+                    "source": "deterministic_fallback",
+                    "fallback_reason": f"{type(exc).__name__}: {exc}",
+                    "overview_status": "provider_fallback",
+                    "overview_drop_reason": f"{type(exc).__name__}: {exc}",
+                },
             )
 
-        return with_generation_metadata(validated, {"source": "openai"})
+        return with_generation_metadata(
+            validated,
+            {
+                "source": "openai",
+                "overview_status": validated.pop("_overview_status", "generated"),
+                "overview_drop_reason": validated.pop("_overview_drop_reason", None),
+            },
+        )
 
     def _generate_with_openai(
         self,
@@ -291,7 +313,12 @@ class OpenAICompatibleChatRecommendationGenerator:
         if not self.api_key:
             return with_generation_metadata(
                 draft,
-                {"source": "deterministic_fallback", "fallback_reason": f"missing_{self.name}_api_key"},
+                {
+                    "source": "deterministic_fallback",
+                    "fallback_reason": f"missing_{self.name}_api_key",
+                    "overview_status": "provider_fallback",
+                    "overview_drop_reason": f"missing_{self.name}_api_key",
+                },
             )
 
         try:
@@ -300,10 +327,22 @@ class OpenAICompatibleChatRecommendationGenerator:
         except Exception as exc:
             return with_generation_metadata(
                 draft,
-                {"source": "deterministic_fallback", "fallback_reason": f"{type(exc).__name__}: {exc}"},
+                {
+                    "source": "deterministic_fallback",
+                    "fallback_reason": f"{type(exc).__name__}: {exc}",
+                    "overview_status": "provider_fallback",
+                    "overview_drop_reason": f"{type(exc).__name__}: {exc}",
+                },
             )
 
-        return with_generation_metadata(validated, {"source": self.name})
+        return with_generation_metadata(
+            validated,
+            {
+                "source": self.name,
+                "overview_status": validated.pop("_overview_status", "generated"),
+                "overview_drop_reason": validated.pop("_overview_drop_reason", None),
+            },
+        )
 
     def _generate_with_chat_completions(
         self,
@@ -420,6 +459,8 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
             "recommendation_mode": generator.model,
             "generation_source": generation_metadata.get("source", generator.name),
             "generation_fallback_reason": generation_metadata.get("fallback_reason"),
+            "overview_status": generation_metadata.get("overview_status", generated.get("_overview_status", "not_requested")),
+            "overview_drop_reason": generation_metadata.get("overview_drop_reason", generated.get("_overview_drop_reason")),
             "latency_ms": latency_ms,
         },
     }
@@ -793,7 +834,7 @@ def validate_llm_recommendation_payload(generated: dict[str, Any], draft: dict[s
     if not isinstance(query_summary, dict):
         query_summary = draft["query_summary"]
 
-    validated_overview = validate_llm_recommendation_overview(
+    validated_overview, overview_status, overview_drop_reason = validate_llm_recommendation_overview(
         generated.get("recommendation_overview"),
         validated_profiles,
         evidence,
@@ -808,6 +849,8 @@ def validate_llm_recommendation_payload(generated: dict[str, Any], draft: dict[s
         "recommendation_overview": validated_overview,
         "recommended_profiles": validated_profiles,
         "evidence": evidence,
+        "_overview_status": overview_status,
+        "_overview_drop_reason": overview_drop_reason,
     }
 
 
@@ -815,33 +858,39 @@ def validate_llm_recommendation_overview(
     generated_overview: Any,
     validated_profiles: list[dict[str, Any]],
     evidence: list[dict[str, Any]],
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str, str | None]:
     if not validated_profiles or not isinstance(generated_overview, dict):
-        return None
+        return None, "missing_from_provider", "missing_recommendation_overview"
 
     first_profile = validated_profiles[0]
     evidence_ids = {item["id"] for item in evidence}
     summary = str(generated_overview.get("summary", "")).strip()
-    if not summary or contains_disallowed_overview_language(summary):
-        return None
+    if not summary:
+        return None, "dropped_invalid", "empty_summary"
+    if contains_disallowed_overview_language(summary):
+        return None, "dropped_invalid", "disallowed_summary_language"
 
     recommended_profile_id = str(generated_overview.get("recommended_profile_id", "")).strip()
     recommended_title = str(generated_overview.get("recommended_title", "")).strip()
     if recommended_profile_id != first_profile["profile_id"]:
-        return None
+        return None, "dropped_invalid", "recommended_profile_id_mismatch"
     if recommended_title != first_profile["title"]:
-        return None
+        return None, "dropped_invalid", "recommended_title_mismatch"
 
     overview_evidence_ids = non_empty_strings(generated_overview.get("evidence_ids"))
     if not overview_evidence_ids or not set(overview_evidence_ids).issubset(evidence_ids):
-        return None
+        return None, "dropped_invalid", "invalid_evidence_ids"
 
-    return {
-        "recommended_profile_id": recommended_profile_id,
-        "recommended_title": recommended_title,
-        "summary": summary,
-        "evidence_ids": overview_evidence_ids,
-    }
+    return (
+        {
+            "recommended_profile_id": recommended_profile_id,
+            "recommended_title": recommended_title,
+            "summary": summary,
+            "evidence_ids": overview_evidence_ids,
+        },
+        "generated",
+        None,
+    )
 
 
 def with_generation_metadata(payload: dict[str, Any], metadata: dict[str, str]) -> dict[str, Any]:

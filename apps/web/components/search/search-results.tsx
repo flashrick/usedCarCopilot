@@ -44,12 +44,23 @@ export function SearchResults({
   const recommendationProvider =
     typeof recommendation?.debug?.recommendation_provider === "string" ? recommendation.debug.recommendation_provider : null;
   const generationSource = typeof recommendation?.debug?.generation_source === "string" ? recommendation.debug.generation_source : null;
+  const overviewStatus = typeof recommendation?.debug?.overview_status === "string" ? recommendation.debug.overview_status : null;
   const showOverviewFallback = Boolean(
     recommendation &&
       !recommendation.recommendation_overview &&
       recommendationProvider &&
       recommendationProvider !== "deterministic" &&
       generationSource === "deterministic_fallback",
+  );
+  const showOverviewUnavailable = Boolean(
+    recommendation &&
+      !recommendation.recommendation_overview &&
+      recommendationProvider &&
+      recommendationProvider !== "deterministic" &&
+      generationSource !== "deterministic_fallback" &&
+      overviewStatus &&
+      overviewStatus !== "generated" &&
+      overviewStatus !== "not_requested",
   );
 
   return (
@@ -132,6 +143,14 @@ export function SearchResults({
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{copy.searchResults.overviewFallbackNotice}</span>
+              </div>
+            </div>
+          ) : null}
+          {showOverviewUnavailable ? (
+            <div className="rounded-lg border border-[#ffcc66]/40 bg-[#ffcc66]/10 p-4 text-sm text-[#ffd68a]">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{copy.searchResults.overviewUnavailableNotice}</span>
               </div>
             </div>
           ) : null}

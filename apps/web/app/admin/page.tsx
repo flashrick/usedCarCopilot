@@ -22,11 +22,13 @@ export default function HomePage() {
   const [brand, setBrand] = useState("");
   const [bodyType, setBodyType] = useState("");
   const [location, setLocation] = useState("Auckland");
-  const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
+  const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendResponse | null>(null);
   const [retrieval, setRetrieval] = useState<RetrieveResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isRetrieving, startRetrieval] = useTransition();
+  const [isAdvising, startAdvice] = useTransition();
 
   useEffect(() => {
     runWorkbenchQuery();
@@ -35,7 +37,7 @@ export default function HomePage() {
 
   function runWorkbenchQuery() {
     setError(null);
-    startTransition(async () => {
+    startRetrieval(async () => {
       try {
         const maxPrice = parseIntegerInput(budget);
         const payload = {
@@ -44,17 +46,52 @@ export default function HomePage() {
           brand: brand || undefined,
           body_type: bodyType || undefined,
           location: location || undefined,
-          limit: 3,
+          limit: 20,
         };
 
-        const [recommendData, retrieveData] = await Promise.all([
-          fetchRecommend(payload),
-          fetchRetrieve({ ...payload, limit: 20 }),
-        ]);
+        const retrieveData = await fetchRetrieve(payload);
 
-        setRecommendation(recommendData);
         setRetrieval(retrieveData);
-        setSelectedListingId(recommendData.recommended_cars[0]?.listing_id ?? null);
+        setRecommendation(null);
+        setSelectedListingIds([]);
+        setSelectedRecommendationId(null);
+      } catch (caughtError) {
+        setError(caughtError instanceof Error ? caughtError.message : copy.adminWorkbench.defaultError);
+      }
+    });
+  }
+
+  function toggleSelection(listingId: string) {
+    setError(null);
+    setSelectedRecommendationId(null);
+    setRecommendation(null);
+    setSelectedListingIds((current) => {
+      if (current.includes(listingId)) {
+        return current.filter((value) => value !== listingId);
+      }
+      if (current.length >= 4) {
+        setError(copy.adminWorkbench.selectionLimitError);
+        return current;
+      }
+      return [...current, listingId];
+    });
+  }
+
+  function requestAdvice() {
+    if (selectedListingIds.length < 2) {
+      setError(copy.adminWorkbench.selectionMinimumError);
+      return;
+    }
+
+    setError(null);
+    startAdvice(async () => {
+      try {
+        const recommendData = await fetchRecommend({
+          query,
+          selected_listing_ids: selectedListingIds,
+        });
+        setRecommendation(recommendData);
+        setSelectedRecommendationId(recommendData.recommended_cars[0]?.listing_id ?? null);
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : copy.adminWorkbench.defaultError);
       }
@@ -62,7 +99,7 @@ export default function HomePage() {
   }
 
   const selectedCar =
-    recommendation?.recommended_cars.find((car) => car.listing_id === selectedListingId) ??
+    recommendation?.recommended_cars.find((car) => car.listing_id === selectedRecommendationId) ??
     recommendation?.recommended_cars[0] ??
     null;
 
@@ -81,7 +118,7 @@ export default function HomePage() {
           onBodyTypeChange={setBodyType}
           onLocationChange={setLocation}
           onSubmit={runWorkbenchQuery}
-          loading={isPending}
+          loading={isRetrieving}
         />
 
         {error ? (
@@ -93,14 +130,50 @@ export default function HomePage() {
 
         <div className="grid gap-4 xl:grid-cols-[1.45fr_0.78fr]">
           <section className="grid gap-4">
-            {recommendation?.recommended_cars.map((car) => (
-              <RecommendationCard
-                key={car.listing_id}
-                car={car}
-                selected={car.listing_id === selectedCar?.listing_id}
-                onSelect={setSelectedListingId}
-              />
-            ))}
+            <section className="rounded-md border border-line/70 bg-panel p-4 shadow-panel">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-muted">{copy.adminWorkbench.shortlistEyebrow}</div>
+                  <h3 className="mt-1 text-lg font-semibold">{copy.adminWorkbench.shortlistTitle}</h3>
+                  <p className="mt-2 text-sm text-muted">{copy.adminWorkbench.selectionHint}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="rounded-md bg-shell px-3 py-2 text-xs text-muted">
+                    {copy.adminWorkbench.selectedCount.replace("{count}", String(selectedListingIds.length))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={requestAdvice}
+                    disabled={isAdvising || selectedListingIds.length < 2}
+                    className="flex h-11 items-center justify-center rounded-md bg-gradient-to-b from-steel to-steelDeep px-4 text-sm font-medium text-white shadow-panel transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {isAdvising ? copy.adminWorkbench.advising : copy.adminWorkbench.getAdvice}
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4">
+                <RetrievalTable
+                  listings={retrieval?.listings ?? []}
+                  selectedListingIds={selectedListingIds}
+                  onToggleSelection={toggleSelection}
+                />
+              </div>
+            </section>
+
+            {recommendation?.recommended_cars.length ? (
+              recommendation.recommended_cars.map((car) => (
+                <RecommendationCard
+                  key={car.listing_id}
+                  car={car}
+                  selected={car.listing_id === selectedCar?.listing_id}
+                  onSelect={setSelectedRecommendationId}
+                />
+              ))
+            ) : (
+              <section className="rounded-md border border-dashed border-line/70 bg-panel p-4 text-sm text-muted">
+                {copy.adminWorkbench.emptyRecommendation}
+              </section>
+            )}
           </section>
 
           <section className="grid gap-4">
@@ -111,7 +184,6 @@ export default function HomePage() {
 
         <div className="grid gap-4">
           <ComparisonMatrix cars={recommendation?.recommended_cars ?? []} />
-          <RetrievalTable listings={retrieval?.listings ?? []} />
         </div>
       </div>
     </div>

@@ -86,16 +86,10 @@ export function buildPrompt(query: string, filters: FindFilters): string {
   return [query.trim(), ...additions].join(" ").trim();
 }
 
-export function toRecommendRequest(query: string, filters: FindFilters, limit: number): RecommendRequest {
+export function toRecommendRequest(query: string, filters: FindFilters, selectedListingIds: string[]): RecommendRequest {
   return {
     query: buildPrompt(query, filters),
-    max_price: parseIntegerInput(filters.budget),
-    max_mileage: parseIntegerInput(filters.mileage),
-    brand: filters.brand || undefined,
-    body_type: filters.bodyType || undefined,
-    fuel_type: filters.fuel || undefined,
-    location: filters.location || undefined,
-    limit,
+    selected_listing_ids: selectedListingIds,
   };
 }
 

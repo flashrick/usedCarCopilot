@@ -40,9 +40,9 @@ ADMIN_PASSWORD=change-me
 
 ## Pages
 
-- `/` user-facing AI car search with recommendations, risk flags, and citations
-- `/admin` workbench with query composer, recommendations, evidence, debug, and comparison
+- `/` user-facing two-stage car search: retrieve a shortlist first, then request AI advice for selected listings
+- `/admin` workbench with query composer, shortlist retrieval, second-stage recommendations, evidence, debug, and comparison
 - `/admin/retrieve` retrieval explorer
-- `/admin/compare` comparison matrix
+- `/admin/compare` shortlist comparison flow backed by the same second-stage AI recommendation contract
 - `/admin/eval` eval report summary
 - `/admin/settings` provider overview

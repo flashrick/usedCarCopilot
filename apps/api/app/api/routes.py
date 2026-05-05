@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import select, text
 
 from app.db.connection import get_session
 from app.db.orm import KnowledgeSourceRecord, ListingRecord
 from app.models.schemas import KnowledgeSource, Listing, RecommendRequest, RecommendResponse, RetrieveRequest, RetrieveResponse
-from app.recommendation.service import recommend
+from app.recommendation.service import RecommendationRequestError, recommend
 from app.retrieval.service import retrieve
 
 
@@ -59,4 +59,7 @@ def retrieve_context(request: RetrieveRequest) -> dict:
 
 @router.post("/recommend", response_model=RecommendResponse)
 def recommend_cars(request: RecommendRequest) -> dict:
-    return recommend(request)
+    try:
+        return recommend(request)
+    except RecommendationRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

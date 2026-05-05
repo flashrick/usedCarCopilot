@@ -13,6 +13,7 @@ from app.evaluation.retrieval_eval import (
     average,
     load_eval_cases,
     normalize_text,
+    post_retrieve,
     ratio,
     risk_theme_matches,
 )
@@ -23,6 +24,7 @@ class RecommendationEvalConfig:
     api_url: str
     seed_dir: Path
     limit: int
+    retrieve_limit: int
     timeout_seconds: float
 
 
@@ -33,7 +35,33 @@ def run_recommendation_eval(config: RecommendationEvalConfig) -> dict[str, Any]:
 
 
 def evaluate_case(case: dict[str, Any], config: RecommendationEvalConfig) -> dict[str, Any]:
-    response = post_recommend(config.api_url, case["query"], config.limit, config.timeout_seconds)
+    retrieval_response = post_retrieve(config.api_url, case["query"], config.retrieve_limit, config.timeout_seconds)
+    selected_listing_ids = shortlist_listing_ids(retrieval_response, config.limit)
+    if len(selected_listing_ids) < 2:
+        expected_models = [canonical_model_name(model) for model in case.get("expected_candidate_models", [])]
+        expected_risks = case.get("expected_risk_themes", [])
+        return {
+            "id": case["id"],
+            "query": case["query"],
+            "expected_models": expected_models,
+            "recommended_models": [],
+            "model_hits": [],
+            "model_recall": 0.0,
+            "expected_risk_themes": expected_risks,
+            "risk_theme_hits": [],
+            "risk_theme_recall": 0.0,
+            "citation_score": 0.0,
+            "citation_failures": ["recommendation skipped because retrieval returned fewer than 2 selectable listings"],
+            "recommendation_count": 0,
+            "evidence_count": 0,
+            "recommendation_mode": None,
+            "embedding_model": retrieval_response.get("debug", {}).get("embedding_model"),
+            "selected_listing_ids": selected_listing_ids,
+            "selected_listing_count": len(selected_listing_ids),
+            "error": "insufficient_shortlist",
+        }
+
+    response = post_recommend(config.api_url, case["query"], selected_listing_ids, config.timeout_seconds)
     expected_models = [canonical_model_name(model) for model in case.get("expected_candidate_models", [])]
     recommended_models = sorted(extract_recommended_models(response))
     model_hits = [model for model in expected_models if model in recommended_models]
@@ -59,6 +87,9 @@ def evaluate_case(case: dict[str, Any], config: RecommendationEvalConfig) -> dic
         "evidence_count": len(response.get("evidence", [])),
         "recommendation_mode": response.get("debug", {}).get("recommendation_mode"),
         "embedding_model": response.get("debug", {}).get("embedding_model"),
+        "selected_listing_ids": selected_listing_ids,
+        "selected_listing_count": len(selected_listing_ids),
+        "error": None,
     }
 
 
@@ -66,9 +97,9 @@ def capped_model_recall(hit_count: int, expected_count: int, recommendation_limi
     return ratio(hit_count, min(expected_count, recommendation_limit))
 
 
-def post_recommend(api_url: str, query: str, limit: int, timeout_seconds: float) -> dict[str, Any]:
+def post_recommend(api_url: str, query: str, selected_listing_ids: list[str], timeout_seconds: float) -> dict[str, Any]:
     url = f"{api_url.rstrip('/')}/recommend"
-    payload = json.dumps({"query": query, "limit": limit}).encode("utf-8")
+    payload = json.dumps({"query": query, "selected_listing_ids": selected_listing_ids}).encode("utf-8")
     request = urllib.request.Request(
         url,
         data=payload,
@@ -94,6 +125,7 @@ def build_summary(case_results: list[dict[str, Any]], config: RecommendationEval
         "api_url": config.api_url,
         "seed_dir": str(config.seed_dir),
         "limit": config.limit,
+        "retrieve_limit": config.retrieve_limit,
         "case_count": total,
         "average_model_recall": round(average(result["model_recall"] for result in case_results), 4),
         "average_risk_theme_recall": round(average(result["risk_theme_recall"] for result in case_results), 4),
@@ -103,6 +135,7 @@ def build_summary(case_results: list[dict[str, Any]], config: RecommendationEval
             average(result["recommendation_count"] for result in case_results),
             2,
         ),
+        "insufficient_shortlist_cases": sum(1 for result in case_results if result.get("error") == "insufficient_shortlist"),
         "recommendation_mode": first_non_empty(result.get("recommendation_mode") for result in case_results),
         "embedding_model": first_non_empty(result.get("embedding_model") for result in case_results),
         "weak_cases": [
@@ -134,6 +167,7 @@ def format_summary(summary: dict[str, Any]) -> str:
         f"- average citation score: {summary['average_citation_score']:.2%}",
         f"- cases with full citations: {summary['cases_with_full_citations']}/{summary['case_count']}",
         f"- average recommendations per case: {summary['average_recommendation_count']:.2f}",
+        f"- insufficient shortlists: {summary['insufficient_shortlist_cases']}",
     ]
     if summary["weak_cases"]:
         lines.append("- weakest cases:")
@@ -156,6 +190,7 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
         f"- API URL: `{summary['api_url']}`",
         f"- Seed data: `{summary['seed_dir']}`",
         f"- Recommend limit: `{summary['limit']}`",
+        f"- Retrieve limit: `{summary['retrieve_limit']}`",
         f"- Recommendation mode: `{summary.get('recommendation_mode') or 'unknown'}`",
         f"- Embedding model: `{summary.get('embedding_model') or 'unknown'}`",
         "",
@@ -167,6 +202,7 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
         f"- Average citation score: {summary['average_citation_score']:.2%}",
         f"- Cases with full citations: {summary['cases_with_full_citations']}/{summary['case_count']}",
         f"- Average recommendations per case: {summary['average_recommendation_count']:.2f}",
+        f"- Insufficient shortlists: {summary['insufficient_shortlist_cases']}",
         "",
         "## Weakest Cases",
         "",
@@ -203,11 +239,21 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
                 f"- Risk theme hits: {', '.join(case['risk_theme_hits']) or 'none'}",
                 f"- Citation score: {case['citation_score']:.2%}",
                 f"- Citation failures: {failures}",
+                f"- Selected listings: {', '.join(case.get('selected_listing_ids', [])) or 'none'}",
                 f"- Recommendations / evidence: {case['recommendation_count']} / {case['evidence_count']}",
                 "",
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def shortlist_listing_ids(retrieval_response: dict[str, Any], limit: int) -> list[str]:
+    listing_ids = [
+        str(listing.get("listing_id")).strip()
+        for listing in retrieval_response.get("listings", [])
+        if str(listing.get("listing_id", "")).strip()
+    ]
+    return listing_ids[: max(2, min(limit, 4))]
 
 
 def score_citations(response: dict[str, Any]) -> tuple[float, list[str]]:

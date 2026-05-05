@@ -99,7 +99,10 @@ export type RecommendedCar = {
   next_steps: string[];
 };
 
-export type RecommendRequest = RetrieveRequest;
+export type RecommendRequest = {
+  query?: string;
+  selected_listing_ids: string[];
+};
 
 export type RecommendResponse = {
   query_summary: QuerySummary;

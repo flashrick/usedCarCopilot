@@ -93,7 +93,7 @@ export function QueryComposer(props: QueryComposerProps) {
               disabled={loading}
             >
               <Search className="h-4 w-4" />
-              {loading ? copy.queryComposer.running : copy.queryComposer.recommend}
+              {loading ? copy.queryComposer.running : copy.queryComposer.retrieve}
             </button>
           </div>
         </div>

@@ -5,10 +5,13 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 
+from fastapi import HTTPException
+
+from app.api.routes import recommend_cars
 from app.core.config import Settings
 from app.embedding.service import get_embedding_provider
 from app.evaluation.provider_validation import provider_api_key, validate_provider
-from app.evaluation.recommendation_eval import capped_model_recall
+from app.evaluation.recommendation_eval import capped_model_recall, shortlist_listing_ids
 from app.evaluation.retrieval_eval import normalize_text, risk_theme_matches
 from app.models.schemas import RecommendRequest, RetrieveRequest
 from app.recommendation import service as recommendation_service
@@ -144,6 +147,19 @@ class RecommendationEvalScoringTests(unittest.TestCase):
         self.assertEqual(capped_model_recall(hit_count=3, expected_count=6, recommendation_limit=3), 1.0)
         self.assertEqual(capped_model_recall(hit_count=2, expected_count=3, recommendation_limit=3), 0.6667)
 
+    def test_shortlist_listing_ids_caps_selection_at_four(self) -> None:
+        retrieval_response = {
+            "listings": [
+                {"listing_id": "car-1"},
+                {"listing_id": "car-2"},
+                {"listing_id": "car-3"},
+                {"listing_id": "car-4"},
+                {"listing_id": "car-5"},
+            ]
+        }
+
+        self.assertEqual(shortlist_listing_ids(retrieval_response, 4), ["car-1", "car-2", "car-3", "car-4"])
+
 
 class ProviderValidationTests(unittest.TestCase):
     def test_provider_validation_skips_missing_api_key(self) -> None:
@@ -203,6 +219,37 @@ class ProviderValidationTests(unittest.TestCase):
 
 
 class RecommendationRegressionTests(unittest.TestCase):
+    def test_validate_recommend_request_requires_between_two_and_four_unique_ids(self) -> None:
+        with self.assertRaisesRegex(recommendation_service.RecommendationRequestError, "at least 2"):
+            recommendation_service.validate_recommend_request(
+                RecommendRequest(query="Find me a city car", selected_listing_ids=["car-1"])
+            )
+
+        with self.assertRaisesRegex(recommendation_service.RecommendationRequestError, "no more than 4"):
+            recommendation_service.validate_recommend_request(
+                RecommendRequest(query="Find me a city car", selected_listing_ids=["1", "2", "3", "4", "5"])
+            )
+
+        with self.assertRaisesRegex(recommendation_service.RecommendationRequestError, "must be unique"):
+            recommendation_service.validate_recommend_request(
+                RecommendRequest(query="Find me a city car", selected_listing_ids=["car-1", "car-1"])
+            )
+
+    def test_recommend_route_returns_400_for_invalid_selection_payload(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            recommend_cars(RecommendRequest(query="Find me a city car", selected_listing_ids=["car-1"]))
+
+        self.assertEqual(caught.exception.status_code, 400)
+        self.assertIn("select at least 2 listing ids", str(caught.exception.detail))
+
+    def test_load_selected_listings_rejects_unknown_ids(self) -> None:
+        class DummySession:
+            def scalars(self, statement: object) -> list[object]:
+                return []
+
+        with self.assertRaisesRegex(recommendation_service.RecommendationRequestError, "not found"):
+            recommendation_service.load_selected_listings(DummySession(), ["missing-1", "missing-2"])
+
     def test_recommendation_generator_selects_deterministic_provider(self) -> None:
         generator = recommendation_service.get_recommendation_generator(
             "deterministic",
@@ -249,7 +296,10 @@ class RecommendationRegressionTests(unittest.TestCase):
         generator = recommendation_service.OpenAIRecommendationGenerator(api_key=None, model="gpt-5-mini")
 
         response = generator.generate(
-            RecommendRequest(query="I need a reliable car under $12,000 for commuting in Auckland."),
+            RecommendRequest(
+                query="I need a reliable car under $12,000 for commuting in Auckland.",
+                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
+            ),
             self._retrieval_response(),
         )
 
@@ -262,7 +312,6 @@ class RecommendationRegressionTests(unittest.TestCase):
             def _post_response(self, payload: dict[str, object]) -> dict[str, object]:
                 prompt_payload = json.loads(payload["input"][1]["content"][0]["text"])
                 draft = prompt_payload["draft_recommendation"]
-                car = draft["recommended_cars"][0]
                 generated = {
                     "query_summary": draft["query_summary"],
                     "recommended_cars": [
@@ -270,6 +319,7 @@ class RecommendationRegressionTests(unittest.TestCase):
                             **car,
                             "why_it_matches": ["LLM-grounded reason that keeps the same listing and citations."],
                         }
+                        for car in draft["recommended_cars"]
                     ],
                 }
                 return {"output": [{"content": [{"type": "output_text", "text": json.dumps(generated)}]}]}
@@ -277,7 +327,10 @@ class RecommendationRegressionTests(unittest.TestCase):
         generator = StubOpenAIGenerator(api_key="test-key", model="gpt-5-mini")
 
         response = generator.generate(
-            RecommendRequest(query="I need a reliable car under $12,000 for commuting in Auckland."),
+            RecommendRequest(
+                query="I need a reliable car under $12,000 for commuting in Auckland.",
+                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
+            ),
             self._retrieval_response(),
         )
 
@@ -292,15 +345,18 @@ class RecommendationRegressionTests(unittest.TestCase):
             def _post_response(self, payload: dict[str, object]) -> dict[str, object]:
                 prompt_payload = json.loads(payload["input"][1]["content"][0]["text"])
                 draft = prompt_payload["draft_recommendation"]
-                car = dict(draft["recommended_cars"][0])
-                car["evidence_ids"] = ["chunk:missing"]
-                generated = {"query_summary": draft["query_summary"], "recommended_cars": [car]}
+                generated_cars = [dict(car) for car in draft["recommended_cars"]]
+                generated_cars[0]["evidence_ids"] = ["chunk:missing"]
+                generated = {"query_summary": draft["query_summary"], "recommended_cars": generated_cars}
                 return {"output": [{"content": [{"type": "output_text", "text": json.dumps(generated)}]}]}
 
         generator = BadCitationGenerator(api_key="test-key", model="gpt-5-mini")
 
         response = generator.generate(
-            RecommendRequest(query="I need a reliable car under $12,000 for commuting in Auckland."),
+            RecommendRequest(
+                query="I need a reliable car under $12,000 for commuting in Auckland.",
+                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
+            ),
             self._retrieval_response(),
         )
 
@@ -316,7 +372,10 @@ class RecommendationRegressionTests(unittest.TestCase):
         )
 
         response = generator.generate(
-            RecommendRequest(query="I need a reliable car under $12,000 for commuting in Auckland."),
+            RecommendRequest(
+                query="I need a reliable car under $12,000 for commuting in Auckland.",
+                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
+            ),
             self._retrieval_response(),
         )
 
@@ -328,7 +387,6 @@ class RecommendationRegressionTests(unittest.TestCase):
             def _post_chat_completion(self, payload: dict[str, object]) -> dict[str, object]:
                 prompt_payload = json.loads(payload["messages"][1]["content"])
                 draft = prompt_payload["draft_recommendation"]
-                car = draft["recommended_cars"][0]
                 generated = {
                     "query_summary": draft["query_summary"],
                     "recommended_cars": [
@@ -336,6 +394,7 @@ class RecommendationRegressionTests(unittest.TestCase):
                             **car,
                             "next_steps": ["Ask for service records, then book an inspection."],
                         }
+                        for car in draft["recommended_cars"]
                     ],
                 }
                 return {"choices": [{"message": {"content": json.dumps(generated)}}]}
@@ -348,7 +407,10 @@ class RecommendationRegressionTests(unittest.TestCase):
         )
 
         response = generator.generate(
-            RecommendRequest(query="I need a reliable car under $12,000 for commuting in Auckland."),
+            RecommendRequest(
+                query="I need a reliable car under $12,000 for commuting in Auckland.",
+                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
+            ),
             self._retrieval_response(),
         )
 
@@ -368,7 +430,10 @@ class RecommendationRegressionTests(unittest.TestCase):
         )
 
         response = generator.generate(
-            RecommendRequest(query="I need a reliable car under $12,000 for commuting in Auckland."),
+            RecommendRequest(
+                query="I need a reliable car under $12,000 for commuting in Auckland.",
+                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
+            ),
             self._retrieval_response(),
         )
 
@@ -387,7 +452,7 @@ class RecommendationRegressionTests(unittest.TestCase):
 
         self.assertEqual([car["listing_id"] for car in selected], ["fit-1", "civic-1", "aqua-1"])
 
-    def test_recommendation_evidence_includes_risk_flag_chunk_citations(self) -> None:
+    def test_recommendation_response_stays_within_selected_ids_and_keeps_citations(self) -> None:
         retrieval_response = self._retrieval_response()
 
         @contextmanager
@@ -398,21 +463,33 @@ class RecommendationRegressionTests(unittest.TestCase):
 
             yield Session()
 
-        original_retrieve = recommendation_service.retrieve
+        original_build_response = recommendation_service.build_selected_retrieval_response
         original_get_session = recommendation_service.get_session
-        recommendation_service.retrieve = lambda request: retrieval_response
+        recommendation_service.build_selected_retrieval_response = lambda session, request: retrieval_response
         recommendation_service.get_session = dummy_session
         try:
             response = recommendation_service.recommend(
-                RecommendRequest(query="I need a reliable car under $12,000 for commuting in Auckland.")
+                RecommendRequest(
+                    query="I need a reliable car under $12,000 for commuting in Auckland.",
+                    selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
+                )
             )
         finally:
-            recommendation_service.retrieve = original_retrieve
+            recommendation_service.build_selected_retrieval_response = original_build_response
             recommendation_service.get_session = original_get_session
 
         evidence_ids = {item["id"] for item in response["evidence"]}
         self.assertEqual(response["debug"]["recommendation_provider"], "deterministic")
         self.assertEqual(response["debug"]["generation_model"], "deterministic_ranker_with_citations")
+        self.assertEqual(
+            [car["listing_id"] for car in response["recommended_cars"]],
+            ["akl-toyota-aqua-test", "akl-honda-fit-test"],
+        )
+        self.assertEqual(
+            response["debug"]["selected_listing_ids"],
+            ["akl-toyota-aqua-test", "akl-honda-fit-test"],
+        )
+        self.assertEqual(response["debug"]["selected_listing_count"], 2)
         self.assertIn("chunk:chunk-4", evidence_ids)
         for car in response["recommended_cars"]:
             self.assertTrue(set(car["evidence_ids"]).issubset(evidence_ids))
@@ -459,7 +536,7 @@ class RecommendationRegressionTests(unittest.TestCase):
 
     def _retrieval_response(self) -> dict[str, object]:
         return {
-            "applied_filters": {"max_price": 12000, "location": "Auckland", "limit": 20},
+            "applied_filters": {"max_price": 12000, "limit": 2, "selected_listing_ids": ["akl-toyota-aqua-test", "akl-honda-fit-test"]},
             "listings": [
                 {
                     "listing_id": "akl-toyota-aqua-test",
@@ -473,6 +550,19 @@ class RecommendationRegressionTests(unittest.TestCase):
                     "body_type": "hatchback",
                     "location": "Auckland",
                     "description": "Clean compact hybrid listing.",
+                },
+                {
+                    "listing_id": "akl-honda-fit-test",
+                    "title": "2016 Honda Fit",
+                    "brand": "Honda",
+                    "model": "Fit",
+                    "year": 2016,
+                    "price": 10990,
+                    "mileage": 98000,
+                    "fuel_type": "petrol",
+                    "body_type": "hatchback",
+                    "location": "Auckland",
+                    "description": "Practical hatchback with tidy city-sized footprint.",
                 }
             ],
             "chunks": [
@@ -480,12 +570,15 @@ class RecommendationRegressionTests(unittest.TestCase):
                 self._chunk("chunk-2", "Toyota", "Aqua", "Low fuel cost suits commuting."),
                 self._chunk("chunk-3", "Toyota", "Aqua", "Compact size is useful in Auckland."),
                 self._chunk("chunk-4", "Toyota", "Aqua", "Buyers should verify service history carefully."),
+                self._chunk("chunk-5", "Honda", "Fit", "Honda Fit is practical for commuting and errands."),
             ],
             "debug": {
-                "retrieval_mode": "structured_filters_plus_semantic_chunks",
+                "retrieval_mode": "selected_listings_plus_semantic_chunks",
                 "embedding_search_enabled": True,
                 "embedding_model": "local-hash-embedding-v1",
-                "candidate_models": ["Toyota Aqua"],
+                "candidate_models": ["Toyota Aqua", "Honda Fit"],
+                "selected_listing_ids": ["akl-toyota-aqua-test", "akl-honda-fit-test"],
+                "selected_listing_count": 2,
             },
         }
 

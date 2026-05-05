@@ -29,9 +29,9 @@ def main() -> None:
     parser.add_argument(
         "--query",
         default="I need a reliable car under $12,000 for commuting in Auckland.",
-        help="Validation query sent through retrieval and recommendation generation.",
+        help="Validation query sent through retrieval and second-stage recommendation generation.",
     )
-    parser.add_argument("--limit", type=int, default=3, help="Recommendation limit.")
+    parser.add_argument("--limit", type=int, default=3, help="Number of shortlisted listings sent into /recommend.")
     parser.add_argument(
         "--include-missing",
         action="store_true",

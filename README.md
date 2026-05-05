@@ -60,7 +60,7 @@ The MVP should support one narrow data scope first:
 
 ## Current Status
 
-The repository now contains planning documents, seed data, and a PostgreSQL-backed FastAPI scaffold with seed ingestion, local chunk embedding generation, pgvector semantic retrieval for `/retrieve`, and deterministic citation-aware recommendations for `/recommend`.
+The repository now contains planning documents, seed data, and a PostgreSQL-backed FastAPI scaffold with seed ingestion, local chunk embedding generation, pgvector semantic retrieval for shortlist building, and a second-stage citation-aware recommendation flow that ranks user-selected listings through `/recommend`.
 
 ## Backend Quickstart
 
@@ -156,7 +156,7 @@ RECOMMENDATION_PROVIDER=deterministic
 RECOMMENDATION_MODEL=deterministic_ranker_with_citations
 ```
 
-Optional OpenAI-backed recommendation generation:
+Optional OpenAI-backed second-stage recommendation generation:
 
 ```bash
 RECOMMENDATION_PROVIDER=openai
@@ -180,7 +180,7 @@ RECOMMENDATION_MODEL=kimi-k2.6
 KIMI_API_KEY=...
 ```
 
-If external AI generation is enabled but unavailable, `/recommend` falls back to the deterministic generator and reports the fallback reason in response debug metadata.
+If external AI generation is enabled but unavailable, the second-stage `/recommend` call falls back to the deterministic generator and reports the fallback reason in response debug metadata.
 
 Run the API:
 
@@ -212,8 +212,8 @@ First endpoints:
 - `GET /health`
 - `GET /listings`
 - `GET /knowledge`
-- `POST /retrieve`, returning structured listings, model-linked knowledge, semantic chunks, and retrieval debug metadata
-- `POST /recommend`, returning top recommendations, match scores, risk flags, price commentary, next steps, and cited evidence
+- `POST /retrieve`, returning shortlist candidates, model-linked knowledge, semantic chunks, and retrieval debug metadata
+- `POST /recommend`, taking `query` plus `selected_listing_ids` and returning ranked advice, match scores, risk flags, price commentary, next steps, and cited evidence for that selected shortlist
 
 ## Frontend Quickstart
 

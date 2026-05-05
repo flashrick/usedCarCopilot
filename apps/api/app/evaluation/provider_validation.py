@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.config import Settings, get_settings
-from app.evaluation.recommendation_eval import score_citations
-from app.models.schemas import RecommendRequest
-from app.recommendation.service import get_recommendation_generator
+from app.db.connection import get_session
+from app.evaluation.recommendation_eval import score_citations, shortlist_listing_ids
+from app.models.schemas import RecommendRequest, RetrieveRequest
+from app.recommendation.service import build_selected_retrieval_response, get_recommendation_generator
 from app.retrieval.service import retrieve
 
 
@@ -26,15 +27,36 @@ def run_provider_validation(
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     resolved_settings = settings or get_settings()
-    request = RecommendRequest(query=config.query, limit=max(1, min(config.limit, 10)))
-    retrieval_response = retrieve(request.model_copy(update={"limit": 20}))
+    retrieval_response = retrieve(RetrieveRequest(query=config.query, limit=20))
+    selected_listing_ids = shortlist_listing_ids(retrieval_response, config.limit)
+    if len(selected_listing_ids) < 2:
+        results = [
+            {
+                "provider": provider,
+                "status": "failed",
+                "error": "retrieval returned fewer than 2 selectable listings",
+            }
+            for provider in config.providers
+        ]
+        return {
+            "query": config.query,
+            "limit": config.limit,
+            "providers": results,
+            "passed": 0,
+            "failed": len(results),
+            "skipped": 0,
+        }
+
+    request = RecommendRequest(query=config.query, selected_listing_ids=selected_listing_ids)
+    with get_session() as session:
+        selected_retrieval_response = build_selected_retrieval_response(session, request)
     results = [
-        validate_provider(provider, request, retrieval_response, resolved_settings, config.include_missing)
+        validate_provider(provider, request, selected_retrieval_response, resolved_settings, config.include_missing)
         for provider in config.providers
     ]
     return {
         "query": config.query,
-        "limit": request.limit,
+        "limit": len(selected_listing_ids),
         "providers": results,
         "passed": sum(1 for result in results if result["status"] == "passed"),
         "failed": sum(1 for result in results if result["status"] == "failed"),

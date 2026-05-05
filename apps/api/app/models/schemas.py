@@ -108,8 +108,9 @@ class RecommendedCar(BaseModel):
     next_steps: list[str] = Field(default_factory=list)
 
 
-class RecommendRequest(RetrieveRequest):
-    limit: int = Field(default=3, ge=1, le=10)
+class RecommendRequest(BaseModel):
+    query: str | None = None
+    selected_listing_ids: list[str] = Field(default_factory=list)
 
 
 class RecommendResponse(BaseModel):

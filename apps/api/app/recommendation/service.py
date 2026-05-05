@@ -7,11 +7,13 @@ from typing import Any, Protocol
 import urllib.error
 import urllib.request
 
+from sqlalchemy import and_, or_, select
+
 from app.core.config import get_settings
 from app.db.connection import get_session
-from app.db.orm import RequestLogRecord
-from app.models.schemas import RecommendRequest
-from app.retrieval.service import retrieve
+from app.db.orm import KnowledgeSourceRecord, ListingRecord, RequestLogRecord
+from app.models.schemas import RecommendRequest, RetrieveRequest
+from app.retrieval.service import infer_filters, retrieve_semantic_chunks
 
 
 SOURCE_TYPE_MAP = {
@@ -161,6 +163,10 @@ class RecommendationGenerator(Protocol):
         """Return the stable recommendation payload fields after retrieval."""
 
 
+class RecommendationRequestError(ValueError):
+    """Raised when the selected-listing recommendation request is invalid."""
+
+
 class DeterministicRecommendationGenerator:
     name = "deterministic"
 
@@ -201,7 +207,7 @@ class DeterministicRecommendationGenerator:
             scored_cars,
             key=lambda car: (-car["match_score"], car["_price"] is None, car["_price"] or 0, car["_mileage"] or 0),
         )
-        recommended_cars = select_diverse_recommendations(ranked_cars, request.limit)
+        recommended_cars = ranked_cars
         for car in recommended_cars:
             car["evidence_ids"] = collect_evidence(car["_listing"], car["_chunks"], car["risk_flags"], evidence)
             car.pop("_listing", None)
@@ -481,18 +487,15 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
         kimi_api_key=settings.kimi_api_key,
         kimi_base_url=settings.kimi_base_url,
     )
-    retrieval_limit = 20
-    retrieval_request = request.model_copy(update={"limit": retrieval_limit})
-    retrieval_response = retrieve(retrieval_request)
-
-    filters = retrieval_response["applied_filters"]
-    listings = retrieval_response["listings"]
-    chunks = retrieval_response["chunks"]
-    generated = generator.generate(request, retrieval_response)
-    generation_metadata = generated.pop("_generation_metadata", {})
-
-    latency_ms = int((perf_counter() - started_at) * 1000)
     with get_session() as session:
+        retrieval_response = build_selected_retrieval_response(session, request)
+        filters = retrieval_response["applied_filters"]
+        listings = retrieval_response["listings"]
+        chunks = retrieval_response["chunks"]
+        generated = generator.generate(request, retrieval_response)
+        generation_metadata = generated.pop("_generation_metadata", {})
+
+        latency_ms = int((perf_counter() - started_at) * 1000)
         session.add(
             RequestLogRecord(
                 endpoint="/recommend",
@@ -513,6 +516,8 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
             "embedding_search_enabled": retrieval_response["debug"].get("embedding_search_enabled"),
             "embedding_model": retrieval_response["debug"].get("embedding_model"),
             "candidate_models": retrieval_response["debug"].get("candidate_models", []),
+            "selected_listing_ids": retrieval_response["debug"].get("selected_listing_ids", []),
+            "selected_listing_count": retrieval_response["debug"].get("selected_listing_count", 0),
             "retrieved_listing_count": len(listings),
             "retrieved_chunk_count": len(chunks),
             "recommendation_provider": generator.name,
@@ -523,6 +528,96 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
             "latency_ms": latency_ms,
         },
     }
+
+
+def build_selected_retrieval_response(session: Any, request: RecommendRequest) -> dict[str, Any]:
+    query, selected_listing_ids = validate_recommend_request(request)
+    listings = load_selected_listings(session, selected_listing_ids)
+    candidate_pairs = dedupe_model_pairs(listings)
+    filters = infer_filters(RetrieveRequest(query=query, location=None, limit=len(selected_listing_ids)))
+    filters["selected_listing_ids"] = selected_listing_ids
+    semantic_chunks = retrieve_semantic_chunks(
+        session=session,
+        query=query,
+        filters=filters,
+        candidate_pairs=candidate_pairs,
+        limit=max(len(selected_listing_ids), 4),
+    )
+
+    return {
+        "query": query,
+        "applied_filters": filters,
+        "listings": listings,
+        "knowledge": load_selected_knowledge(session, candidate_pairs),
+        "chunks": semantic_chunks,
+        "debug": {
+            "candidate_models": [f"{brand} {model}" for brand, model in candidate_pairs],
+            "selected_listing_ids": selected_listing_ids,
+            "selected_listing_count": len(selected_listing_ids),
+            "retrieval_mode": "selected_listings_plus_semantic_chunks",
+            "embedding_search_enabled": bool(semantic_chunks),
+            "embedding_model": get_settings().embedding_model,
+            "semantic_chunk_count": len(semantic_chunks),
+        },
+    }
+
+
+def validate_recommend_request(request: RecommendRequest) -> tuple[str, list[str]]:
+    query = (request.query or "").strip()
+    if not query:
+        raise RecommendationRequestError("query is required")
+
+    selected_listing_ids = [listing_id.strip() for listing_id in request.selected_listing_ids if listing_id.strip()]
+    if len(selected_listing_ids) < 2:
+        raise RecommendationRequestError("select at least 2 listing ids")
+    if len(selected_listing_ids) > 4:
+        raise RecommendationRequestError("select no more than 4 listing ids")
+    if len(set(selected_listing_ids)) != len(selected_listing_ids):
+        raise RecommendationRequestError("selected listing ids must be unique")
+    return query, selected_listing_ids
+
+
+def load_selected_listings(session: Any, selected_listing_ids: list[str]) -> list[Any]:
+    rows = list(
+        session.scalars(
+            select(ListingRecord).where(ListingRecord.listing_id.in_(selected_listing_ids))
+        )
+    )
+    listings_by_id = {row.listing_id: row for row in rows}
+    missing_listing_ids = [listing_id for listing_id in selected_listing_ids if listing_id not in listings_by_id]
+    if missing_listing_ids:
+        raise RecommendationRequestError("selected listing ids not found: " + ", ".join(missing_listing_ids))
+    return [listings_by_id[listing_id] for listing_id in selected_listing_ids]
+
+
+def dedupe_model_pairs(listings: list[Any]) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for listing in listings:
+        pair = (str(value_of(listing, "brand")), str(value_of(listing, "model")))
+        if pair not in pairs:
+            pairs.append(pair)
+    return pairs
+
+
+def load_selected_knowledge(session: Any, candidate_pairs: list[tuple[str, str]]) -> list[Any]:
+    if not candidate_pairs:
+        return []
+
+    return list(
+        session.scalars(
+            select(KnowledgeSourceRecord)
+            .where(
+                or_(
+                    *[
+                        and_(KnowledgeSourceRecord.brand == brand, KnowledgeSourceRecord.model == model)
+                        for brand, model in candidate_pairs
+                    ]
+                )
+            )
+            .order_by(KnowledgeSourceRecord.evidence_level.desc(), KnowledgeSourceRecord.source_id.asc())
+            .limit(max(len(candidate_pairs) * 3, 10))
+        )
+    )
 
 
 def with_generation_metadata(payload: dict[str, Any], metadata: dict[str, str]) -> dict[str, Any]:

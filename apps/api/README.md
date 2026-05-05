@@ -67,7 +67,7 @@ RECOMMENDATION_PROVIDER=deterministic
 RECOMMENDATION_MODEL=deterministic_ranker_with_citations
 ```
 
-Optional OpenAI-backed recommendation generation:
+Optional OpenAI-backed second-stage recommendation generation:
 
 ```bash
 RECOMMENDATION_PROVIDER=openai
@@ -91,7 +91,7 @@ RECOMMENDATION_MODEL=kimi-k2.6
 KIMI_API_KEY=...
 ```
 
-If external AI generation is enabled but unavailable, `/recommend` falls back to the deterministic generator and reports the fallback reason in response debug metadata.
+If external AI generation is enabled but unavailable, the second-stage `/recommend` call falls back to the deterministic generator and reports the fallback reason in response debug metadata.
 
 Run the API manually:
 
@@ -138,4 +138,4 @@ cd apps/api
 
 The retrieval eval runner calls `POST /retrieve` for the 20 seed eval cases, then reports model recall, risk-theme recall, filter recall, semantic chunk coverage, and weakest cases.
 
-`POST /recommend` reuses retrieval context, ranks candidate listings with deterministic structured signals, selects a model-diverse top list, and returns match scores, reasons, risk flags, price commentary, next steps, and evidence ids. The current local recommendation provider is `deterministic`; `openai`, `deepseek`, `qwen`, and `kimi` can be enabled for AI generation behind the same response contract. The recommendation eval runner calls `POST /recommend` for the same 20 eval cases, then reports model recall, risk-theme recall, citation score, and weakest cases.
+`POST /recommend` is the second stage of the flow. It accepts the original natural-language query plus `selected_listing_ids`, rebuilds evidence around those selected listings only, ranks them with deterministic structured signals, and returns match scores, reasons, risk flags, price commentary, next steps, and evidence ids. The current local recommendation provider is `deterministic`; `openai`, `deepseek`, `qwen`, and `kimi` can be enabled for AI generation behind the same response contract. The recommendation eval runner now calls `POST /retrieve` first, selects the top shortlist items, then validates `POST /recommend` on that selected subset.

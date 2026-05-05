@@ -14,9 +14,10 @@ export default function FindQueryPage() {
   const [query, setQuery] = useState(defaultQuery);
   const [recommendation, setRecommendation] = useState<RecommendResponse | null>(null);
   const [retrieval, setRetrieval] = useState<RetrieveResponse | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isAdvising, setIsAdvising] = useState(false);
   const hasLoadedInitialQuery = useRef(false);
   const { copy } = useLocale();
 
@@ -47,23 +48,61 @@ export default function FindQueryPage() {
     setIsSearching(true);
 
     try {
-      const recommendPayload = { query: trimmedQuery, limit: 3 };
       const retrievePayload = { query: trimmedQuery, limit: 20 };
 
-      const [recommendData, retrieveData] = await Promise.all([
-        fetchRecommend(recommendPayload),
-        fetchRetrieve(retrievePayload),
-      ]);
+      const retrieveData = await fetchRetrieve(retrievePayload);
 
-      setRecommendation(recommendData);
       setRetrieval(retrieveData);
-      setSelectedId(recommendData.recommended_cars[0]?.listing_id ?? null);
+      setRecommendation(null);
+      setSelectedListingIds([]);
 
       document.getElementById("shortlist")?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : copy.findQuery.searchFailed);
     } finally {
       setIsSearching(false);
+    }
+  }
+
+  function toggleSelection(listingId: string) {
+    setError(null);
+    setRecommendation(null);
+    setSelectedListingIds((current) => {
+      if (current.includes(listingId)) {
+        return current.filter((value) => value !== listingId);
+      }
+      if (current.length >= 4) {
+        setError(copy.findQuery.selectionLimitError);
+        return current;
+      }
+      return [...current, listingId];
+    });
+  }
+
+  async function requestAdvice() {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      setError(copy.findQuery.emptyQueryError);
+      return;
+    }
+    if (selectedListingIds.length < 2) {
+      setError(copy.findQuery.selectionMinimumError);
+      return;
+    }
+
+    setError(null);
+    setIsAdvising(true);
+    try {
+      const recommendData = await fetchRecommend({
+        query: trimmedQuery,
+        selected_listing_ids: selectedListingIds,
+      });
+      setRecommendation(recommendData);
+      document.getElementById("advice")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : copy.findQuery.adviceFailed);
+    } finally {
+      setIsAdvising(false);
     }
   }
 
@@ -131,8 +170,10 @@ export default function FindQueryPage() {
           <SearchResults
             recommendation={recommendation}
             retrieval={retrieval}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
+            selectedListingIds={selectedListingIds}
+            onToggleSelection={toggleSelection}
+            onRequestAdvice={() => void requestAdvice()}
+            recommendationLoading={isAdvising}
           />
         </div>
       </div>

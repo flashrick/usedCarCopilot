@@ -113,3 +113,40 @@ export type EvalSummary = {
   metrics: Array<{ label: string; value: string }>;
   weakestCases: string[];
 };
+
+export type AIProviderId = "deterministic" | "openai" | "deepseek" | "qwen" | "kimi";
+
+export type ProviderConnectionSettings = {
+  apiKeyConfigured: boolean;
+  baseUrl: string;
+  timeoutSeconds?: string;
+};
+
+export type AdminSettingsResponse = {
+  envFilePath: string;
+  recommendationProvider: AIProviderId;
+  recommendationModel: string;
+  providers: {
+    openai: ProviderConnectionSettings;
+    deepseek: ProviderConnectionSettings;
+    qwen: ProviderConnectionSettings;
+    kimi: ProviderConnectionSettings;
+  };
+};
+
+export type ProviderConnectionUpdate = {
+  apiKey?: string;
+  baseUrl: string;
+  timeoutSeconds?: string;
+};
+
+export type AdminSettingsUpdate = {
+  recommendationProvider: AIProviderId;
+  recommendationModel: string;
+  providers: {
+    openai: ProviderConnectionUpdate;
+    deepseek: ProviderConnectionUpdate;
+    qwen: ProviderConnectionUpdate;
+    kimi: ProviderConnectionUpdate;
+  };
+};

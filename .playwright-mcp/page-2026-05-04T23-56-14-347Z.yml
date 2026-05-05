@@ -1,0 +1,139 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - img [ref=e5]
+    - generic [ref=e9]: Language
+    - generic [ref=e10]:
+      - button "EN" [pressed] [ref=e11] [cursor=pointer]
+      - button "简中" [ref=e12] [cursor=pointer]
+  - generic [ref=e14]:
+    - complementary [ref=e15]:
+      - generic [ref=e16]:
+        - img [ref=e18]
+        - generic [ref=e21]:
+          - paragraph [ref=e22]: Used Car
+          - heading "Copilot" [level=1] [ref=e23]
+      - navigation [ref=e24]:
+        - link "Workbench" [ref=e25] [cursor=pointer]:
+          - /url: /admin
+          - img [ref=e26]
+          - generic [ref=e31]: Workbench
+        - link "Retrieval" [ref=e32] [cursor=pointer]:
+          - /url: /admin/retrieve
+          - img [ref=e33]
+          - generic [ref=e37]: Retrieval
+        - link "Compare" [ref=e38] [cursor=pointer]:
+          - /url: /admin/compare
+          - img [ref=e39]
+          - generic [ref=e42]: Compare
+        - link "Eval" [ref=e43] [cursor=pointer]:
+          - /url: /admin/eval
+          - img [ref=e44]
+          - generic [ref=e46]: Eval
+        - link "Providers" [ref=e47] [cursor=pointer]:
+          - /url: /admin/settings
+          - img [ref=e48]
+          - generic [ref=e51]: Providers
+      - generic [ref=e52]: Analyst-style workbench generated from the Stitch concept and wired to the FastAPI recommendation stack.
+    - main [ref=e53]:
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e58]:
+              - generic [ref=e59]: Provider Matrix
+              - heading "Recommendation provider settings" [level=2] [ref=e60]
+              - paragraph [ref=e61]: "Choose which AI provider powers `/recommend`, then edit the model and provider-specific connection settings below."
+            - img [ref=e63]
+          - generic [ref=e74]:
+            - generic [ref=e75]:
+              - generic [ref=e76]: Recommendation provider
+              - 'combobox "Recommendation provider This writes `RECOMMENDATION_PROVIDER` into the shared `.env` file." [ref=e77]':
+                - option "Deterministic" [selected]
+                - option "OpenAI"
+                - option "DeepSeek"
+                - option "Qwen"
+                - option "Kimi"
+              - generic [ref=e78]: "This writes `RECOMMENDATION_PROVIDER` into the shared `.env` file."
+            - generic [ref=e79]:
+              - generic [ref=e80]: Recommendation model
+              - textbox "Recommendation model Use the provider default model or override it with a specific model ID." [ref=e81]:
+                - /placeholder: deterministic_ranker_with_citations
+                - text: deterministic_ranker_with_citations
+              - generic [ref=e82]: Use the provider default model or override it with a specific model ID.
+            - generic [ref=e83]:
+              - generic [ref=e84]:
+                - generic [ref=e85]:
+                  - generic [ref=e86]: Deterministic
+                  - generic [ref=e87]: deterministic_ranker_with_citations
+                - generic [ref=e88]:
+                  - img [ref=e89]
+                  - text: Configured
+              - paragraph [ref=e92]: Local fallback and default development path.
+            - generic [ref=e93]:
+              - article [ref=e94]:
+                - generic [ref=e95]:
+                  - generic [ref=e96]:
+                    - generic [ref=e97]: Deterministic
+                    - generic [ref=e98]: deterministic_ranker_with_citations
+                  - generic [ref=e99]:
+                    - img [ref=e100]
+                    - text: Configured
+                - paragraph [ref=e103]: Local fallback and default development path.
+              - article [ref=e104]:
+                - generic [ref=e105]:
+                  - generic [ref=e106]:
+                    - generic [ref=e107]: OpenAI
+                    - generic [ref=e108]: gpt-5-mini
+                  - generic [ref=e109]:
+                    - img [ref=e110]
+                    - text: Missing key
+                - paragraph [ref=e112]: Responses API with Structured Outputs and local citation validation.
+              - article [ref=e113]:
+                - generic [ref=e114]:
+                  - generic [ref=e115]:
+                    - generic [ref=e116]: DeepSeek
+                    - generic [ref=e117]: deepseek-chat
+                  - generic [ref=e118]:
+                    - img [ref=e119]
+                    - text: Missing key
+                - paragraph [ref=e121]: OpenAI-compatible Chat Completions path with JSON-mode parsing.
+              - article [ref=e122]:
+                - generic [ref=e123]:
+                  - generic [ref=e124]:
+                    - generic [ref=e125]: Qwen
+                    - generic [ref=e126]: qwen-plus
+                  - generic [ref=e127]:
+                    - img [ref=e128]
+                    - text: Missing key
+                - paragraph [ref=e130]: DashScope compatible-mode Chat Completions path.
+              - article [ref=e131]:
+                - generic [ref=e132]:
+                  - generic [ref=e133]:
+                    - generic [ref=e134]: Kimi
+                    - generic [ref=e135]: kimi-k2.6
+                  - generic [ref=e136]:
+                    - img [ref=e137]
+                    - text: Missing key
+                - paragraph [ref=e139]: Moonshot OpenAI-compatible Chat Completions path.
+        - generic [ref=e140]:
+          - generic [ref=e141]:
+            - generic [ref=e142]:
+              - generic [ref=e143]: Credential Editor
+              - heading "Provider connection settings" [level=2] [ref=e144]
+              - paragraph [ref=e145]: "Provider-specific API keys are stored in the repository `.env`. Leaving the key field blank keeps the current secret."
+            - img [ref=e147]
+          - generic [ref=e150]:
+            - img [ref=e151]
+            - text: "Failed to execute 'fetch' on 'Window': Request cannot be constructed from a URL that includes credentials: /admin/settings/config"
+          - generic [ref=e153]:
+            - generic [ref=e154]: Deterministic mode does not require an external API key or base URL.
+            - generic [ref=e155]:
+              - generic [ref=e156]: Environment file
+              - generic [ref=e157]: Loading file path...
+            - generic [ref=e158]:
+              - generic [ref=e159]: Apply changes
+              - generic [ref=e160]:
+                - generic [ref=e161]: "Saving updates the repository `.env` file immediately."
+                - generic [ref=e162]: Restart the API service before testing the new provider.
+                - generic [ref=e163]: Restart the web service too if you changed admin credentials or browser-side base URL settings.
+            - button "Save provider settings" [ref=e165] [cursor=pointer]
+  - alert [ref=e166]

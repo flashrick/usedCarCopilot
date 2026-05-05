@@ -17,7 +17,13 @@ from app.evaluation.provider_validation import provider_api_key, validate_provid
 from app.evaluation.recommendation_eval import capped_model_recall, score_citations
 from app.models.schemas import RecommendRequest, RetrieveRequest
 from app.recommendation import service as recommendation_service
-from app.retrieval.service import infer_filters, popularity_sort_key, score_profile, select_diverse_profiles
+from app.retrieval.service import (
+    infer_filters,
+    popularity_sort_key,
+    popular_model_matches_filters,
+    score_profile,
+    select_diverse_profiles,
+)
 from app.valuation.service import compute_profile_valuation
 from scripts.sync_market_catalog import build_diff, build_outputs, read_json
 
@@ -91,6 +97,37 @@ class RetrievalParsingTests(unittest.TestCase):
             popularity_sort_key(41.0, 1, 3, "Toyota Camry"),
             popularity_sort_key(41.4, 2, 1, "BYD Song Plus"),
         )
+
+    def test_popular_models_respect_suv_body_type_filter(self) -> None:
+        class Variant:
+            market_variant_id = "us-toyota-camry"
+            brand = "Toyota"
+            model = "Camry"
+            body_types = ["sedan"]
+            fuel_types = ["petrol", "petrol hybrid"]
+
+        filters = infer_filters(
+            RetrieveRequest(
+                query="Find me a family SUV with a big boot, good safety reputation, and low maintenance risk.",
+                market="US",
+                limit=6,
+            )
+        )
+
+        self.assertEqual(filters["body_type"], "suv")
+        self.assertFalse(popular_model_matches_filters(Variant(), filters, {"us-toyota-camry"}))
+
+    def test_popular_models_require_matching_profile_availability(self) -> None:
+        class Variant:
+            market_variant_id = "us-toyota-camry"
+            brand = "Toyota"
+            model = "Camry"
+            body_types = ["sedan"]
+            fuel_types = ["petrol", "petrol hybrid"]
+
+        filters = {"market": "US", "brands": [], "models": [], "body_type": None, "fuel_type": None, "transmission": "manual"}
+
+        self.assertFalse(popular_model_matches_filters(Variant(), filters, {"us-honda-civic"}))
 
     def test_score_profile_rewards_budget_and_family_fit(self) -> None:
         class Profile:

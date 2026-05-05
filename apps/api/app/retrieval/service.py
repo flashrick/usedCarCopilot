@@ -179,9 +179,12 @@ def load_popular_models(session: Session, filters: dict[str, Any], limit: int) -
     if brands:
         statement = statement.where(ModelMarketVariantRecord.brand.in_(brands))
 
+    matching_variant_ids = load_matching_market_variant_ids(session, filters)
     rows = session.execute(statement).all()
     scored: list[dict[str, Any]] = []
     for variant, ranking in rows:
+        if not popular_model_matches_filters(variant, filters, matching_variant_ids):
+            continue
         relevance_score = score_popular_model(variant, ranking, filters)
         scored.append(
             {
@@ -206,6 +209,81 @@ def load_popular_models(session: Session, filters: dict[str, Any], limit: int) -
     for item in scored:
         item.pop("_sort_key", None)
     return scored[:limit]
+
+
+def load_matching_market_variant_ids(session: Session, filters: dict[str, Any]) -> set[str]:
+    statement = select(VehicleProfileRecord.market_variant_id).where(
+        *build_profile_filter_conditions(filters),
+        VehicleProfileRecord.market_variant_id.is_not(None),
+    )
+    return {market_variant_id for market_variant_id in session.scalars(statement.distinct()) if market_variant_id}
+
+
+def popular_model_matches_filters(
+    variant: ModelMarketVariantRecord,
+    filters: dict[str, Any],
+    matching_variant_ids: set[str] | None = None,
+) -> bool:
+    if matching_variant_ids is not None and variant.market_variant_id not in matching_variant_ids:
+        return False
+
+    body_type = filters.get("body_type")
+    if body_type and body_type not in list(variant.body_types or []):
+        return False
+
+    fuel_type = filters.get("fuel_type")
+    if fuel_type and not fuel_group_matches(list(variant.fuel_types or []), fuel_type):
+        return False
+
+    requested_pairs = model_pairs(filters.get("models") or [])
+    if requested_pairs and (variant.brand, variant.model) not in requested_pairs:
+        return False
+
+    return True
+
+
+def build_profile_filter_conditions(filters: dict[str, Any]) -> list[Any]:
+    conditions: list[Any] = [VehicleProfileRecord.market == filters["market"]]
+
+    brands = filters.get("brands") or []
+    if brands:
+        conditions.append(VehicleProfileRecord.brand.in_(brands))
+
+    requested_pairs = model_pairs(filters.get("models") or [])
+    if requested_pairs:
+        conditions.append(
+            or_(
+                *[
+                    and_(VehicleProfileRecord.brand == brand, VehicleProfileRecord.model == model)
+                    for brand, model in requested_pairs
+                ]
+            )
+        )
+
+    body_type = filters.get("body_type")
+    if body_type:
+        conditions.append(func.lower(VehicleProfileRecord.body_type) == body_type)
+
+    fuel_type = filters.get("fuel_type")
+    if fuel_type == "hybrid":
+        conditions.append(func.lower(VehicleProfileRecord.fuel_type).like("%hybrid%"))
+    elif fuel_type == "electric":
+        conditions.append(func.lower(VehicleProfileRecord.fuel_type).like("%electric%"))
+    elif fuel_type == "diesel":
+        conditions.append(func.lower(VehicleProfileRecord.fuel_type).like("%diesel%"))
+    elif fuel_type == "petrol":
+        conditions.append(
+            and_(
+                func.lower(VehicleProfileRecord.fuel_type).like("%petrol%"),
+                ~func.lower(VehicleProfileRecord.fuel_type).like("%hybrid%"),
+            )
+        )
+
+    transmission = filters.get("transmission")
+    if transmission:
+        conditions.append(func.lower(VehicleProfileRecord.transmission) == transmission)
+
+    return conditions
 
 
 def popularity_sort_key(relevance_score: float, brand_rank: int, popularity_rank: int, display_name: str) -> tuple[float, int, int, str]:
@@ -277,41 +355,7 @@ def build_popular_model_reasons(
 
 
 def load_candidate_profiles(session: Session, filters: dict[str, Any]) -> list[VehicleProfileRecord]:
-    statement = select(VehicleProfileRecord).where(VehicleProfileRecord.market == filters["market"])
-
-    brands = filters.get("brands") or []
-    if brands:
-        statement = statement.where(VehicleProfileRecord.brand.in_(brands))
-
-    requested_pairs = model_pairs(filters.get("models") or [])
-    if requested_pairs:
-        statement = statement.where(
-            or_(
-                *[
-                    and_(VehicleProfileRecord.brand == brand, VehicleProfileRecord.model == model)
-                    for brand, model in requested_pairs
-                ]
-            )
-        )
-
-    body_type = filters.get("body_type")
-    if body_type:
-        statement = statement.where(func.lower(VehicleProfileRecord.body_type) == body_type)
-
-    fuel_type = filters.get("fuel_type")
-    if fuel_type == "hybrid":
-        statement = statement.where(func.lower(VehicleProfileRecord.fuel_type).like("%hybrid%"))
-    elif fuel_type == "electric":
-        statement = statement.where(func.lower(VehicleProfileRecord.fuel_type).like("%electric%"))
-    elif fuel_type == "diesel":
-        statement = statement.where(func.lower(VehicleProfileRecord.fuel_type).like("%diesel%"))
-    elif fuel_type == "petrol":
-        statement = statement.where(
-            and_(
-                func.lower(VehicleProfileRecord.fuel_type).like("%petrol%"),
-                ~func.lower(VehicleProfileRecord.fuel_type).like("%hybrid%"),
-            )
-        )
+    statement = select(VehicleProfileRecord).where(*build_profile_filter_conditions(filters))
 
     return list(session.scalars(statement.order_by(VehicleProfileRecord.brand.asc(), VehicleProfileRecord.model.asc(), VehicleProfileRecord.profile_id.asc())))
 

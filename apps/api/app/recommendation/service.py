@@ -838,6 +838,7 @@ def validate_llm_recommendation_payload(generated: dict[str, Any], draft: dict[s
         generated.get("recommendation_overview"),
         validated_profiles,
         evidence,
+        draft.get("_overview_draft"),
     )
 
     return {
@@ -858,28 +859,29 @@ def validate_llm_recommendation_overview(
     generated_overview: Any,
     validated_profiles: list[dict[str, Any]],
     evidence: list[dict[str, Any]],
+    draft_overview: Any,
 ) -> tuple[dict[str, Any] | None, str, str | None]:
     if not validated_profiles or not isinstance(generated_overview, dict):
-        return None, "missing_from_provider", "missing_recommendation_overview"
+        return fallback_recommendation_overview(draft_overview, evidence, "missing_recommendation_overview")
 
     first_profile = validated_profiles[0]
     evidence_ids = {item["id"] for item in evidence}
     summary = str(generated_overview.get("summary", "")).strip()
     if not summary:
-        return None, "dropped_invalid", "empty_summary"
+        return fallback_recommendation_overview(draft_overview, evidence, "empty_summary")
     if contains_disallowed_overview_language(summary):
-        return None, "dropped_invalid", "disallowed_summary_language"
+        return fallback_recommendation_overview(draft_overview, evidence, "disallowed_summary_language")
 
     recommended_profile_id = str(generated_overview.get("recommended_profile_id", "")).strip()
     recommended_title = str(generated_overview.get("recommended_title", "")).strip()
     if recommended_profile_id != first_profile["profile_id"]:
-        return None, "dropped_invalid", "recommended_profile_id_mismatch"
+        return fallback_recommendation_overview(draft_overview, evidence, "recommended_profile_id_mismatch")
     if recommended_title != first_profile["title"]:
-        return None, "dropped_invalid", "recommended_title_mismatch"
+        return fallback_recommendation_overview(draft_overview, evidence, "recommended_title_mismatch")
 
     overview_evidence_ids = non_empty_strings(generated_overview.get("evidence_ids"))
     if not overview_evidence_ids or not set(overview_evidence_ids).issubset(evidence_ids):
-        return None, "dropped_invalid", "invalid_evidence_ids"
+        return fallback_recommendation_overview(draft_overview, evidence, "invalid_evidence_ids")
 
     return (
         {
@@ -891,6 +893,37 @@ def validate_llm_recommendation_overview(
         "generated",
         None,
     )
+
+
+def fallback_recommendation_overview(
+    draft_overview: Any,
+    evidence: list[dict[str, Any]],
+    drop_reason: str,
+) -> tuple[dict[str, Any] | None, str, str | None]:
+    normalized = normalize_draft_overview(draft_overview, evidence)
+    if normalized is None:
+        return None, "missing_from_provider", drop_reason
+    return normalized, "fallback_draft", drop_reason
+
+
+def normalize_draft_overview(draft_overview: Any, evidence: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not isinstance(draft_overview, dict):
+        return None
+    evidence_ids = {item["id"] for item in evidence}
+    recommended_profile_id = str(draft_overview.get("recommended_profile_id", "")).strip()
+    recommended_title = str(draft_overview.get("recommended_title", "")).strip()
+    summary = str(draft_overview.get("summary", "")).strip()
+    overview_evidence_ids = non_empty_strings(draft_overview.get("evidence_ids"))
+    if not recommended_profile_id or not recommended_title or not summary:
+        return None
+    if not overview_evidence_ids or not set(overview_evidence_ids).issubset(evidence_ids):
+        return None
+    return {
+        "recommended_profile_id": recommended_profile_id,
+        "recommended_title": recommended_title,
+        "summary": summary,
+        "evidence_ids": overview_evidence_ids,
+    }
 
 
 def with_generation_metadata(payload: dict[str, Any], metadata: dict[str, str]) -> dict[str, Any]:

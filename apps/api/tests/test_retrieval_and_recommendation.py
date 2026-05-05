@@ -354,7 +354,7 @@ class RecommendationRegressionTests(unittest.TestCase):
         self.assertEqual(validated["_overview_status"], "generated")
         self.assertIsNone(validated["_overview_drop_reason"])
 
-    def test_validate_llm_recommendation_payload_discards_invalid_overview(self) -> None:
+    def test_validate_llm_recommendation_payload_falls_back_to_draft_overview(self) -> None:
         draft = self._recommendation_draft()
         invalid_overviews = [
             {
@@ -393,10 +393,26 @@ class RecommendationRegressionTests(unittest.TestCase):
             with self.subTest(overview=overview):
                 generated = self._generated_payload(draft, overview)
                 validated = recommendation_service.validate_llm_recommendation_payload(generated, draft)
-                self.assertIsNone(validated["recommendation_overview"])
+                self.assertEqual(
+                    validated["recommendation_overview"]["recommended_profile_id"],
+                    draft["_overview_draft"]["recommended_profile_id"],
+                )
                 self.assertEqual(validated["recommended_profiles"][0]["profile_id"], "rav4-1")
-                self.assertIn(validated["_overview_status"], {"missing_from_provider", "dropped_invalid"})
+                self.assertEqual(validated["_overview_status"], "fallback_draft")
                 self.assertIsNotNone(validated["_overview_drop_reason"])
+
+    def test_validate_llm_recommendation_payload_falls_back_to_draft_when_overview_missing(self) -> None:
+        draft = self._recommendation_draft()
+        generated = self._generated_payload(draft, None)
+
+        validated = recommendation_service.validate_llm_recommendation_payload(generated, draft)
+
+        self.assertEqual(
+            validated["recommendation_overview"]["recommended_profile_id"],
+            draft["_overview_draft"]["recommended_profile_id"],
+        )
+        self.assertEqual(validated["_overview_status"], "fallback_draft")
+        self.assertEqual(validated["_overview_drop_reason"], "missing_recommendation_overview")
 
     def test_deterministic_generator_returns_null_overview(self) -> None:
         generator = recommendation_service.DeterministicRecommendationGenerator()
@@ -426,7 +442,7 @@ class RecommendationRegressionTests(unittest.TestCase):
         self.assertEqual(generated["_generation_metadata"]["overview_drop_reason"], "missing_openai_api_key")
 
     @staticmethod
-    def _generated_payload(draft: dict[str, object], overview: dict[str, object]) -> dict[str, object]:
+    def _generated_payload(draft: dict[str, object], overview: dict[str, object] | None) -> dict[str, object]:
         generated_profiles = []
         for profile in draft["recommended_profiles"]:
             generated_profiles.append(
@@ -504,6 +520,12 @@ class RecommendationRegressionTests(unittest.TestCase):
                 {"id": "chunk:k1", "source_type": "review", "title": "RAV4 ownership notes", "snippet": "Hybrid ownership note."},
                 {"id": "profile:crv-1", "source_type": "vehicle_profile", "title": "2020-2022 Honda CR-V EX", "snippet": "Profile summary."},
             ],
+            "_overview_draft": {
+                "recommended_profile_id": "rav4-1",
+                "recommended_title": "2020-2022 Toyota RAV4 Hybrid XLE",
+                "summary": "2020-2022 Toyota RAV4 Hybrid XLE is the strongest overall match in this shortlist.",
+                "evidence_ids": ["profile:rav4-1", "chunk:k1"],
+            },
         }
 
     @staticmethod

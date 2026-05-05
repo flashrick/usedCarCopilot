@@ -27,6 +27,9 @@ from app.retrieval.service import (
 )
 from app.valuation.service import compute_profile_valuation
 from scripts.sync_market_catalog import build_diff, build_outputs, read_json
+from scripts.sync_safety_ratings import build_diff as build_safety_diff
+from scripts.sync_safety_ratings import build_outputs as build_safety_outputs
+from scripts.sync_seed_common import build_sync_parser
 from starlette.requests import Request
 
 
@@ -279,6 +282,49 @@ class CatalogScriptTests(unittest.TestCase):
 
         self.assertEqual(diff["market_variants_added"][0]["market_variant_id"], "us-honda-crv")
         self.assertEqual(diff["vehicle_profiles_added"][0]["profile_id"], "us-honda-crv-2020-2022-1.5-petrol-ex")
+
+    def test_safety_sync_build_outputs_generate_market_scoped_rows(self) -> None:
+        source = read_json(REPO_ROOT / "data" / "seed" / "market_catalog_seed.json")
+        result = build_safety_outputs(source, "CN")
+
+        self.assertGreaterEqual(len(result.safety_ratings), 5)
+        self.assertTrue(all(row["market"] == "CN" for row in result.safety_ratings))
+        self.assertTrue(all("safety_rating_status" in row for row in result.safety_ratings))
+
+    def test_safety_sync_diff_detects_new_profile_rating(self) -> None:
+        previous = {
+            "safety_ratings": [
+                {"profile_id": "us-toyota-rav4-2020-2022-2.5-hybrid-xle"},
+            ]
+        }
+        current = {
+            "safety_ratings": [
+                {"profile_id": "us-toyota-rav4-2020-2022-2.5-hybrid-xle"},
+                {"profile_id": "us-honda-crv-2020-2022-1.5-petrol-ex"},
+            ]
+        }
+
+        diff = build_safety_diff(previous, current)
+
+        self.assertEqual(diff["safety_ratings_added"][0]["profile_id"], "us-honda-crv-2020-2022-1.5-petrol-ex")
+
+    def test_sync_scripts_share_build_diff_market_cli_rules(self) -> None:
+        market_parser = build_sync_parser(
+            description="market",
+            default_source=REPO_ROOT / "data" / "seed" / "market_catalog_seed.json",
+        )
+        safety_parser = build_sync_parser(
+            description="safety",
+            default_source=REPO_ROOT / "data" / "seed" / "market_catalog_seed.json",
+        )
+
+        market_args = market_parser.parse_args(["build", "--market", "cn"])
+        safety_args = safety_parser.parse_args(["diff", "--market", "us"])
+
+        self.assertEqual(market_args.mode, "build")
+        self.assertEqual(market_args.market, "cn")
+        self.assertEqual(safety_args.mode, "diff")
+        self.assertEqual(safety_args.market, "us")
 
 
 class RecommendationEvalTests(unittest.TestCase):

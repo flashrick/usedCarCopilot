@@ -3,18 +3,34 @@
 
 from __future__ import annotations
 
-import argparse
-import json
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts.sync_seed_common import (
+        DEFAULT_SEED_DIR,
+        build_sync_parser,
+        diff_by_id,
+        normalize_market,
+        read_json,
+        write_json,
+        write_jsonl,
+    )
+except ModuleNotFoundError:
+    from sync_seed_common import (
+        DEFAULT_SEED_DIR,
+        build_sync_parser,
+        diff_by_id,
+        normalize_market,
+        read_json,
+        write_json,
+        write_jsonl,
+    )
 
-ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SEED_DIR = ROOT / "data" / "seed"
+
 DEFAULT_SOURCE_PATH = DEFAULT_SEED_DIR / "market_catalog_seed.json"
-DEFAULT_SNAPSHOT_DIR = DEFAULT_SEED_DIR / "snapshots"
 
 
 @dataclass(frozen=True)
@@ -34,31 +50,6 @@ class Adapter:
 
     def load(self, market: str) -> list[dict[str, Any]]:
         return []
-
-
-def read_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
-            handle.write("\n")
-
-
-def normalize_market(value: str) -> str:
-    market = value.strip().upper()
-    if market not in {"US", "CN"}:
-        raise SystemExit(f"Unsupported market: {value}")
-    return market
-
 
 def select_models(models: list[dict[str, Any]], market: str) -> list[dict[str, Any]]:
     if market == "ALL":
@@ -202,12 +193,6 @@ def build_diff(previous: dict[str, Any], current: dict[str, Any]) -> dict[str, A
         },
     }
 
-
-def diff_by_id(previous_rows: list[dict[str, Any]], current_rows: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
-    previous_ids = {str(row[key]) for row in previous_rows}
-    return [row for row in current_rows if str(row[key]) not in previous_ids]
-
-
 def run_build(seed_dir: Path, source_path: Path, market: str, snapshot_dir: Path) -> None:
     source = read_json(source_path)
     result = build_outputs(source, market)
@@ -239,13 +224,10 @@ def run_diff(seed_dir: Path, source_path: Path, market: str, snapshot_dir: Path,
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build or diff market-aware vehicle catalog seed artifacts.")
-    parser.add_argument("mode", choices=["build", "diff"])
-    parser.add_argument("--market", default="all", choices=["us", "cn", "all"], help="Target market for output generation.")
-    parser.add_argument("--seed-dir", type=Path, default=DEFAULT_SEED_DIR)
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE_PATH)
-    parser.add_argument("--snapshot-dir", type=Path, default=DEFAULT_SNAPSHOT_DIR)
-    parser.add_argument("--report", type=Path, default=None, help="Optional diff report path.")
+    parser = build_sync_parser(
+        description="Build or diff market-aware vehicle catalog seed artifacts.",
+        default_source=DEFAULT_SOURCE_PATH,
+    )
     args = parser.parse_args()
 
     market = args.market.upper()

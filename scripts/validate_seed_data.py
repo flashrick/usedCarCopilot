@@ -91,6 +91,19 @@ KNOWLEDGE_REQUIRED_FIELDS = {
     "ownership_stage",
 }
 
+SAFETY_REQUIRED_FIELDS = {
+    "profile_id",
+    "market_variant_id",
+    "market",
+    "brand",
+    "model",
+    "year_start",
+    "year_end",
+    "safety_rating_stars",
+    "safety_rating_source",
+    "safety_rating_status",
+}
+
 MODEL_ALIASES = {
     "Toyota RAV4": "Toyota RAV4",
     "Honda CR-V": "Honda CR-V",
@@ -271,6 +284,45 @@ def validate_knowledge(rows: list[dict[str, Any]], profile_ids: set[str], market
     return errors, models
 
 
+def validate_safety_ratings(
+    rows: list[dict[str, Any]],
+    profile_ids: set[str],
+    market_variant_ids: set[str],
+) -> list[str]:
+    errors = validate_required_fields(rows, SAFETY_REQUIRED_FIELDS, "safety rating")
+    ids = [row.get("profile_id") for row in rows]
+    for profile_id, count in Counter(ids).items():
+        if profile_id and count > 1:
+            errors.append(f"safety rating profile_id is duplicated: {profile_id}")
+
+    for row in rows:
+        profile_id = row.get("profile_id")
+        status = row.get("safety_rating_status")
+        stars = row.get("safety_rating_stars")
+        source = row.get("safety_rating_source")
+        if row.get("market") not in {"US", "CN"}:
+            errors.append(f"{profile_id}: safety rating market must be US or CN")
+        if row.get("market_variant_id") not in market_variant_ids:
+            errors.append(f"{profile_id}: safety rating market_variant_id does not exist in model_market_variants.jsonl")
+        if profile_id not in profile_ids:
+            errors.append(f"{profile_id}: safety rating profile_id does not exist in vehicle_profiles.jsonl")
+        if status not in {"rated", "unrated"}:
+            errors.append(f"{profile_id}: safety_rating_status must be rated or unrated")
+        if row.get("year_end") < row.get("year_start"):
+            errors.append(f"{profile_id}: safety rating year_end must be >= year_start")
+        if status == "rated":
+            if not isinstance(stars, int) or not (1 <= stars <= 5):
+                errors.append(f"{profile_id}: rated safety rows must have integer stars between 1 and 5")
+            if not isinstance(source, str) or not source.strip():
+                errors.append(f"{profile_id}: rated safety rows must have a non-empty source")
+        if status == "unrated":
+            if stars is not None:
+                errors.append(f"{profile_id}: unrated safety rows must not include stars")
+            if source is not None:
+                errors.append(f"{profile_id}: unrated safety rows must not include a source")
+    return errors
+
+
 def collect_eval_models(value: Any) -> set[str]:
     models: set[str] = set()
     if isinstance(value, dict):
@@ -326,6 +378,7 @@ def main() -> None:
     parser.add_argument("--popularity", type=Path, default=Path("data/seed/model_popularity_rankings.jsonl"))
     parser.add_argument("--vehicle-profiles", type=Path, default=Path("data/seed/vehicle_profiles.jsonl"))
     parser.add_argument("--knowledge", type=Path, default=Path("data/seed/knowledge_sources.jsonl"))
+    parser.add_argument("--safety-ratings", type=Path, default=Path("data/seed/safety_ratings.jsonl"))
     parser.add_argument("--eval-cases", type=Path, default=Path("data/seed/eval_cases.json"))
     args = parser.parse_args()
 
@@ -339,6 +392,7 @@ def main() -> None:
     profile_errors, profile_models = validate_vehicle_profiles(profile_rows, market_variant_ids)
     profile_ids = {row["profile_id"] for row in profile_rows if row.get("profile_id")}
     knowledge_errors, knowledge_models = validate_knowledge(read_jsonl(args.knowledge), profile_ids, market_variant_ids)
+    safety_errors = validate_safety_ratings(read_jsonl(args.safety_ratings), profile_ids, market_variant_ids)
     eval_errors, eval_warnings = validate_eval_cases(read_json(args.eval_cases), profile_models | variant_models, knowledge_models | variant_models)
 
     errors.extend(canonical_errors)
@@ -346,6 +400,7 @@ def main() -> None:
     errors.extend(popularity_errors)
     errors.extend(profile_errors)
     errors.extend(knowledge_errors)
+    errors.extend(safety_errors)
     errors.extend(eval_errors)
     warnings.extend(eval_warnings)
 

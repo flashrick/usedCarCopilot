@@ -1,0 +1,124 @@
+{
+  "safety_ratings": [
+    {
+      "profile_id": "cn-byd-qin-plus-2022-2025-dmi-120km",
+      "market_variant_id": "cn-byd-qin-plus",
+      "market": "CN",
+      "brand": "BYD",
+      "model": "Qin Plus",
+      "year_start": 2022,
+      "year_end": 2025,
+      "safety_rating_stars": null,
+      "safety_rating_source": null,
+      "safety_rating_status": "unrated"
+    },
+    {
+      "profile_id": "cn-byd-song-plus-2023-2025-dmi-premium",
+      "market_variant_id": "cn-byd-song-plus",
+      "market": "CN",
+      "brand": "BYD",
+      "model": "Song Plus",
+      "year_start": 2023,
+      "year_end": 2025,
+      "safety_rating_stars": null,
+      "safety_rating_source": null,
+      "safety_rating_status": "unrated"
+    },
+    {
+      "profile_id": "cn-honda-crv-2021-2024-2.0-hybrid-premium",
+      "market_variant_id": "cn-honda-crv",
+      "market": "CN",
+      "brand": "Honda",
+      "model": "CR-V",
+      "year_start": 2021,
+      "year_end": 2024,
+      "safety_rating_stars": null,
+      "safety_rating_source": null,
+      "safety_rating_status": "unrated"
+    },
+    {
+      "profile_id": "cn-tesla-model-y-2022-2025-rwd",
+      "market_variant_id": "cn-tesla-model-y",
+      "market": "CN",
+      "brand": "Tesla",
+      "model": "Model Y",
+      "year_start": 2022,
+      "year_end": 2025,
+      "safety_rating_stars": null,
+      "safety_rating_source": null,
+      "safety_rating_status": "unrated"
+    },
+    {
+      "profile_id": "cn-toyota-camry-2021-2024-2.5-hybrid-luxury",
+      "market_variant_id": "cn-toyota-camry",
+      "market": "CN",
+      "brand": "Toyota",
+      "model": "Camry",
+      "year_start": 2021,
+      "year_end": 2024,
+      "safety_rating_stars": null,
+      "safety_rating_source": null,
+      "safety_rating_status": "unrated"
+    },
+    {
+      "profile_id": "us-honda-crv-2020-2022-1.5-petrol-ex",
+      "market_variant_id": "us-honda-crv",
+      "market": "US",
+      "brand": "Honda",
+      "model": "CR-V",
+      "year_start": 2020,
+      "year_end": 2022,
+      "safety_rating_stars": 5,
+      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
+      "safety_rating_status": "rated"
+    },
+    {
+      "profile_id": "us-honda-civic-2022-2024-2.0-petrol-sport",
+      "market_variant_id": "us-honda-civic",
+      "market": "US",
+      "brand": "Honda",
+      "model": "Civic",
+      "year_start": 2022,
+      "year_end": 2024,
+      "safety_rating_stars": 5,
+      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
+      "safety_rating_status": "rated"
+    },
+    {
+      "profile_id": "us-tesla-model-y-2021-2024-long-range-awd",
+      "market_variant_id": "us-tesla-model-y",
+      "market": "US",
+      "brand": "Tesla",
+      "model": "Model Y",
+      "year_start": 2021,
+      "year_end": 2024,
+      "safety_rating_stars": 5,
+      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
+      "safety_rating_status": "rated"
+    },
+    {
+      "profile_id": "us-toyota-camry-2021-2023-2.5-hybrid-le",
+      "market_variant_id": "us-toyota-camry",
+      "market": "US",
+      "brand": "Toyota",
+      "model": "Camry",
+      "year_start": 2021,
+      "year_end": 2023,
+      "safety_rating_stars": 5,
+      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
+      "safety_rating_status": "rated"
+    },
+    {
+      "profile_id": "us-toyota-rav4-2020-2022-2.5-hybrid-xle",
+      "market_variant_id": "us-toyota-rav4",
+      "market": "US",
+      "brand": "Toyota",
+      "model": "RAV4",
+      "year_start": 2020,
+      "year_end": 2022,
+      "safety_rating_stars": 5,
+      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
+      "safety_rating_status": "rated"
+    }
+  ]
+}

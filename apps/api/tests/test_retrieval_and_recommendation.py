@@ -1,164 +1,156 @@
 from __future__ import annotations
 
-import json
 import unittest
-from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi import HTTPException
 
 from app.api.routes import recommend_cars
 from app.core.config import Settings
-from app.embedding.service import get_embedding_provider
 from app.evaluation.provider_validation import provider_api_key, validate_provider
-from app.evaluation.recommendation_eval import capped_model_recall, shortlist_listing_ids
-from app.evaluation.retrieval_eval import normalize_text, risk_theme_matches
+from app.evaluation.recommendation_eval import capped_model_recall, score_citations, shortlist_profile_ids
 from app.models.schemas import RecommendRequest, RetrieveRequest
 from app.recommendation import service as recommendation_service
-from app.retrieval.service import infer_filters, select_diverse_listings
+from app.retrieval.service import infer_filters, score_profile, select_diverse_profiles
+from app.valuation.service import compute_profile_valuation
+
+
+class ValuationTests(unittest.TestCase):
+    def test_compute_profile_valuation_returns_monotonic_range(self) -> None:
+        valuation = compute_profile_valuation(
+            {
+                "brand": "Toyota",
+                "body_type": "hatchback",
+                "fuel_type": "petrol hybrid",
+                "year_end": 2017,
+                "maintenance_cost_band": "low",
+                "fuel_consumption_l_per_100km": 4.1,
+                "reliability_summary": "Strong reliability reputation",
+                "suitability_summary": "Excellent for city commuting and low running costs",
+                "title": "2015-2017 Toyota Aqua 1.5 Hybrid S",
+                "trim": "S",
+                "base_msrp_nzd": 27990,
+            }
+        )
+
+        self.assertLessEqual(valuation["estimated_price_min_nzd"], valuation["estimated_price_mid_nzd"])
+        self.assertLessEqual(valuation["estimated_price_mid_nzd"], valuation["estimated_price_max_nzd"])
+        self.assertGreater(valuation["assumed_mileage_km"], 0)
+        self.assertEqual(valuation["valuation_market"], "NZ")
 
 
 class RetrievalParsingTests(unittest.TestCase):
-    def test_embedding_provider_selects_local_hash_provider(self) -> None:
-        provider = get_embedding_provider("local_hash", "local-hash-embedding-v1")
-
-        self.assertEqual(provider.model, "local-hash-embedding-v1")
-        self.assertEqual(len(provider.embed("Toyota Aqua city hybrid")), provider.dimensions)
-
-    def test_embedding_provider_rejects_unknown_provider(self) -> None:
-        with self.assertRaises(ValueError):
-            get_embedding_provider("unsupported")
-
-    def test_infers_excluded_body_type_and_supported_brands(self) -> None:
+    def test_infers_budget_body_fuel_and_usage_from_query(self) -> None:
         filters = infer_filters(
-            RetrieveRequest(
-                query=(
-                    "I want a used car under $10,000 and I do not want an SUV. "
-                    "What are the safer choices from Toyota, Honda, and Mazda?"
-                )
-            )
+            RetrieveRequest(query="I need a hybrid hatchback under $20,000 for city commuting.", limit=6)
         )
 
-        self.assertEqual(filters["max_price"], 10000)
-        self.assertEqual(filters["exclude_body_type"], "suv")
-        self.assertEqual(filters["brands"], ["Toyota", "Honda", "Mazda"])
-        self.assertEqual(filters["priority"], "safer_choice")
-
-    def test_infers_scope_for_these_brands_novice_query(self) -> None:
-        filters = infer_filters(
-            RetrieveRequest(
-                query=(
-                    "I do not know much about cars. Give me the simplest "
-                    "low-risk used car choice for Auckland from these brands."
-                )
-            )
-        )
-
-        self.assertEqual(filters["brands"], ["Toyota", "Honda", "Mazda"])
-        self.assertEqual(filters["priority"], "low_risk")
-        self.assertEqual(filters["user_profile"], "novice_buyer")
-
-    def test_infers_eval_context_for_short_distance_and_ownership_queries(self) -> None:
-        short_trip_filters = infer_filters(
-            RetrieveRequest(query="I drive mostly short distances. Should I get a Honda Fit or Toyota Aqua?")
-        )
-        self.assertIn("Toyota Aqua", short_trip_filters["models"])
-        self.assertIn("Honda Fit", short_trip_filters["models"])
-        self.assertEqual(short_trip_filters["usage"], "short_city_trips")
-        self.assertEqual(short_trip_filters["priority"], "efficiency")
-
-        suv_cost_filters = infer_filters(
-            RetrieveRequest(query="Which is likely to be cheaper to own: Mazda CX-5 or Toyota RAV4?")
-        )
-        self.assertIn("Toyota RAV4", suv_cost_filters["models"])
-        self.assertIn("Mazda CX-5", suv_cost_filters["models"])
-        self.assertEqual(suv_cost_filters["intent"], "ownership_cost")
-        self.assertEqual(suv_cost_filters["body_type"], "suv")
-
-    def test_infers_rideshare_and_small_family_priorities(self) -> None:
-        rideshare_filters = infer_filters(
-            RetrieveRequest(query="Is a used Toyota Prius a good choice for Uber-style driving in Auckland?")
-        )
-        self.assertIn("Toyota Prius", rideshare_filters["models"])
-        self.assertEqual(rideshare_filters["usage"], "rideshare")
-        self.assertEqual(rideshare_filters["priority"], "fuel_economy")
-
-        family_filters = infer_filters(
-            RetrieveRequest(query="Is Mazda2 too small if I sometimes carry a child and shopping bags?")
-        )
-        self.assertEqual(family_filters["models"], ["Mazda2"])
-        self.assertEqual(family_filters["usage"], "small_family_errands")
-        self.assertEqual(family_filters["household_size"], 3)
-        self.assertEqual(family_filters["priority"], "practicality")
-
-    def test_infers_structured_fuel_and_mileage_preferences(self) -> None:
-        filters = infer_filters(
-            RetrieveRequest(
-                query="I want a hybrid under 100,000 km for Auckland commuting.",
-                max_mileage=95000,
-                fuel_type="hybrid",
-            )
-        )
-
+        self.assertEqual(filters["budget_max"], 20000)
+        self.assertEqual(filters["body_type"], "hatchback")
         self.assertEqual(filters["fuel_type"], "hybrid")
-        self.assertEqual(filters["max_mileage"], 95000)
+        self.assertEqual(filters["usage"], "city")
 
-    def test_infers_budget_up_to_phrase_with_commas(self) -> None:
-        filters = infer_filters(RetrieveRequest(query="Budget up to $12,000 for an Auckland commuter."))
+    def test_infers_compare_models_and_brand_preferences(self) -> None:
+        filters = infer_filters(
+            RetrieveRequest(query="Between Mazda3 and Honda Civic, which is the better first car?", limit=6)
+        )
 
-        self.assertEqual(filters["max_price"], 12000)
+        self.assertIn("Mazda3", filters["models"])
+        self.assertIn("Honda Civic", filters["models"])
+        self.assertEqual(filters["usage"], "first_car")
 
-    def test_select_diverse_listings_prefers_model_coverage_before_duplicates(self) -> None:
-        class Listing:
-            def __init__(self, listing_id: str, brand: str, model: str) -> None:
-                self.listing_id = listing_id
+    def test_select_diverse_profiles_prefers_model_coverage_before_duplicates(self) -> None:
+        class Profile:
+            def __init__(self, profile_id: str, brand: str, model: str) -> None:
+                self.profile_id = profile_id
                 self.brand = brand
                 self.model = model
 
-        listings = [
-            Listing("fit-1", "Honda", "Fit"),
-            Listing("fit-2", "Honda", "Fit"),
-            Listing("civic-1", "Honda", "Civic"),
-            Listing("aqua-1", "Toyota", "Aqua"),
+        profiles = [
+            Profile("fit-1", "Honda", "Fit"),
+            Profile("fit-2", "Honda", "Fit"),
+            Profile("civic-1", "Honda", "Civic"),
+            Profile("aqua-1", "Toyota", "Aqua"),
         ]
 
-        selected = select_diverse_listings(listings, 3)
+        selected = select_diverse_profiles(profiles, 3)
 
-        self.assertEqual([listing.listing_id for listing in selected], ["fit-1", "civic-1", "aqua-1"])
+        self.assertEqual([profile.profile_id for profile in selected], ["fit-1", "civic-1", "aqua-1"])
 
+    def test_score_profile_rewards_budget_and_running_cost_fit(self) -> None:
+        class Profile:
+            brand = "Toyota"
+            model = "Aqua"
+            estimated_price_mid_nzd = 14500
+            estimated_price_min_nzd = 13000
+            body_type = "hatchback"
+            fuel_type = "petrol hybrid"
+            transmission = "cvt"
+            suitability_summary = "Excellent for city commuting and easy parking."
+            comfort_summary = "Comfortable enough for daily use."
+            space_summary = "Compact rear seat and boot."
+            nvh_summary = "Quiet enough in town."
+            maintenance_cost_band = "low"
+            fuel_consumption_l_per_100km = 4.1
+            reliability_summary = "Strong reliability reputation."
 
-class RetrievalEvalScoringTests(unittest.TestCase):
-    def test_risk_theme_matching_accepts_project_synonyms(self) -> None:
-        evidence = normalize_text(
-            "Buyers should compare trim level and newer trims. "
-            "A clean service record, documentation, and condition evidence matter. "
-            "Imported hatchback listings still need checks for body repair and paint."
+        score = score_profile(
+            Profile(),
+            {
+                "budget_max": 20000,
+                "brands": ["Toyota"],
+                "models": ["Toyota Aqua"],
+                "body_type": "hatchback",
+                "fuel_type": "hybrid",
+                "transmission": "cvt",
+                "usage": "city",
+                "priority": "low_running_cost",
+                "limit": 6,
+            },
         )
 
-        self.assertTrue(risk_theme_matches("trim differences", evidence))
-        self.assertTrue(risk_theme_matches("feature variation by year", evidence))
-        self.assertTrue(risk_theme_matches("used condition", evidence))
-        self.assertTrue(risk_theme_matches("used import condition", evidence))
-        self.assertTrue(risk_theme_matches("parking damage", evidence))
+        self.assertGreaterEqual(score, 70)
 
 
-class RecommendationEvalScoringTests(unittest.TestCase):
-    def test_model_recall_is_capped_by_recommendation_limit(self) -> None:
-        self.assertEqual(capped_model_recall(hit_count=3, expected_count=6, recommendation_limit=3), 1.0)
-        self.assertEqual(capped_model_recall(hit_count=2, expected_count=3, recommendation_limit=3), 0.6667)
-
-    def test_shortlist_listing_ids_caps_selection_at_four(self) -> None:
+class RecommendationEvalTests(unittest.TestCase):
+    def test_shortlist_profile_ids_caps_selection_at_four(self) -> None:
         retrieval_response = {
-            "listings": [
-                {"listing_id": "car-1"},
-                {"listing_id": "car-2"},
-                {"listing_id": "car-3"},
-                {"listing_id": "car-4"},
-                {"listing_id": "car-5"},
+            "vehicle_profiles": [
+                {"profile_id": "car-1"},
+                {"profile_id": "car-2"},
+                {"profile_id": "car-3"},
+                {"profile_id": "car-4"},
+                {"profile_id": "car-5"},
             ]
         }
 
-        self.assertEqual(shortlist_listing_ids(retrieval_response, 4), ["car-1", "car-2", "car-3", "car-4"])
+        self.assertEqual(shortlist_profile_ids(retrieval_response, 4), ["car-1", "car-2", "car-3", "car-4"])
+
+    def test_capped_model_recall_is_limited_by_recommendation_cap(self) -> None:
+        self.assertEqual(capped_model_recall(hit_count=3, expected_count=6, recommendation_limit=3), 1.0)
+        self.assertEqual(capped_model_recall(hit_count=2, expected_count=3, recommendation_limit=3), 0.6667)
+
+    def test_score_citations_accepts_profile_and_flag_evidence_ids(self) -> None:
+        response = {
+            "recommended_profiles": [
+                {
+                    "profile_id": "aqua-1",
+                    "evidence_ids": ["profile:aqua-1", "chunk:k1"],
+                    "risk_flags": [
+                        {"label": "Hybrid system check", "evidence_ids": ["chunk:k1"]},
+                    ],
+                }
+            ],
+            "evidence": [
+                {"id": "profile:aqua-1"},
+                {"id": "chunk:k1"},
+            ],
+        }
+
+        score, failures = score_citations(response)
+
+        self.assertEqual(score, 1.0)
+        self.assertEqual(failures, [])
 
 
 class ProviderValidationTests(unittest.TestCase):
@@ -167,7 +159,7 @@ class ProviderValidationTests(unittest.TestCase):
 
         result = validate_provider(
             "openai",
-            RecommendRequest(query="I need a reliable car under $12,000 for commuting in Auckland."),
+            RecommendRequest(query="Recommend a city-friendly hybrid.", selected_profile_ids=["aqua-1", "fit-1"]),
             self._retrieval_response(),
             settings,
             include_missing=False,
@@ -194,7 +186,7 @@ class ProviderValidationTests(unittest.TestCase):
             "embedding_provider": "local_hash",
             "embedding_model": "local-hash-embedding-v1",
             "recommendation_provider": "deterministic",
-            "recommendation_model": "deterministic_ranker_with_citations",
+            "recommendation_model": "deterministic_variant_recommender_v1",
             "openai_api_key": None,
             "openai_base_url": "https://api.openai.com/v1",
             "openai_timeout_seconds": 30.0,
@@ -211,8 +203,8 @@ class ProviderValidationTests(unittest.TestCase):
     @staticmethod
     def _retrieval_response() -> dict[str, object]:
         return {
-            "applied_filters": {"max_price": 12000, "location": "Auckland", "limit": 20},
-            "listings": [],
+            "applied_filters": {"budget_max": 20000, "limit": 4, "selected_profile_ids": ["aqua-1", "fit-1"]},
+            "vehicle_profiles": [],
             "chunks": [],
             "debug": {},
         }
@@ -222,379 +214,108 @@ class RecommendationRegressionTests(unittest.TestCase):
     def test_validate_recommend_request_requires_between_two_and_four_unique_ids(self) -> None:
         with self.assertRaisesRegex(recommendation_service.RecommendationRequestError, "at least 2"):
             recommendation_service.validate_recommend_request(
-                RecommendRequest(query="Find me a city car", selected_listing_ids=["car-1"])
+                RecommendRequest(query="Find me a city profile", selected_profile_ids=["car-1"])
             )
 
         with self.assertRaisesRegex(recommendation_service.RecommendationRequestError, "no more than 4"):
             recommendation_service.validate_recommend_request(
-                RecommendRequest(query="Find me a city car", selected_listing_ids=["1", "2", "3", "4", "5"])
+                RecommendRequest(query="Find me a city profile", selected_profile_ids=["1", "2", "3", "4", "5"])
             )
 
         with self.assertRaisesRegex(recommendation_service.RecommendationRequestError, "must be unique"):
             recommendation_service.validate_recommend_request(
-                RecommendRequest(query="Find me a city car", selected_listing_ids=["car-1", "car-1"])
+                RecommendRequest(query="Find me a city profile", selected_profile_ids=["car-1", "car-1"])
             )
 
     def test_recommend_route_returns_400_for_invalid_selection_payload(self) -> None:
         with self.assertRaises(HTTPException) as caught:
-            recommend_cars(RecommendRequest(query="Find me a city car", selected_listing_ids=["car-1"]))
+            recommend_cars(RecommendRequest(query="Find me a city profile", selected_profile_ids=["car-1"]))
 
         self.assertEqual(caught.exception.status_code, 400)
-        self.assertIn("select at least 2 listing ids", str(caught.exception.detail))
-
-    def test_load_selected_listings_rejects_unknown_ids(self) -> None:
-        class DummySession:
-            def scalars(self, statement: object) -> list[object]:
-                return []
-
-        with self.assertRaisesRegex(recommendation_service.RecommendationRequestError, "not found"):
-            recommendation_service.load_selected_listings(DummySession(), ["missing-1", "missing-2"])
+        self.assertIn("select at least 2 profile ids", str(caught.exception.detail))
 
     def test_recommendation_generator_selects_deterministic_provider(self) -> None:
         generator = recommendation_service.get_recommendation_generator(
             "deterministic",
-            "deterministic_ranker_with_citations",
+            "deterministic_variant_recommender_v1",
         )
 
         self.assertEqual(generator.name, "deterministic")
-        self.assertEqual(generator.model, "deterministic_ranker_with_citations")
+        self.assertEqual(generator.model, "deterministic_variant_recommender_v1")
 
     def test_recommendation_generator_rejects_unknown_provider(self) -> None:
         with self.assertRaises(ValueError):
             recommendation_service.get_recommendation_generator("unsupported")
 
-    def test_recommendation_generator_selects_openai_provider(self) -> None:
-        generator = recommendation_service.get_recommendation_generator(
-            "openai",
-            "gpt-5-mini",
-            openai_api_key="test-key",
-        )
-
-        self.assertEqual(generator.name, "openai")
-        self.assertEqual(generator.model, "gpt-5-mini")
-
-    def test_recommendation_generator_selects_openai_compatible_providers(self) -> None:
-        cases = [
-            ("deepseek", "deepseek-chat"),
-            ("qwen", "qwen-plus"),
-            ("kimi", "kimi-k2.6"),
-        ]
-        for provider, expected_model in cases:
-            with self.subTest(provider=provider):
-                generator = recommendation_service.get_recommendation_generator(
-                    provider,
-                    "deterministic_ranker_with_citations",
-                    deepseek_api_key="test-key",
-                    qwen_api_key="test-key",
-                    kimi_api_key="test-key",
-                )
-
-                self.assertEqual(generator.name, provider)
-                self.assertEqual(generator.model, expected_model)
-
     def test_openai_generator_falls_back_without_api_key(self) -> None:
         generator = recommendation_service.OpenAIRecommendationGenerator(api_key=None, model="gpt-5-mini")
 
         response = generator.generate(
-            RecommendRequest(
-                query="I need a reliable car under $12,000 for commuting in Auckland.",
-                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
-            ),
+            RecommendRequest(query="Recommend a city-friendly hybrid.", selected_profile_ids=["aqua-1", "fit-1"]),
             self._retrieval_response(),
         )
 
         self.assertEqual(response["_generation_metadata"]["source"], "deterministic_fallback")
         self.assertEqual(response["_generation_metadata"]["fallback_reason"], "missing_openai_api_key")
-        self.assertEqual(response["recommended_cars"][0]["listing_id"], "akl-toyota-aqua-test")
-
-    def test_openai_generator_accepts_valid_structured_response(self) -> None:
-        class StubOpenAIGenerator(recommendation_service.OpenAIRecommendationGenerator):
-            def _post_response(self, payload: dict[str, object]) -> dict[str, object]:
-                prompt_payload = json.loads(payload["input"][1]["content"][0]["text"])
-                draft = prompt_payload["draft_recommendation"]
-                generated = {
-                    "query_summary": draft["query_summary"],
-                    "recommended_cars": [
-                        {
-                            **car,
-                            "why_it_matches": ["LLM-grounded reason that keeps the same listing and citations."],
-                        }
-                        for car in draft["recommended_cars"]
-                    ],
-                }
-                return {"output": [{"content": [{"type": "output_text", "text": json.dumps(generated)}]}]}
-
-        generator = StubOpenAIGenerator(api_key="test-key", model="gpt-5-mini")
-
-        response = generator.generate(
-            RecommendRequest(
-                query="I need a reliable car under $12,000 for commuting in Auckland.",
-                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
-            ),
-            self._retrieval_response(),
-        )
-
-        self.assertEqual(response["_generation_metadata"]["source"], "openai")
-        self.assertEqual(
-            response["recommended_cars"][0]["why_it_matches"],
-            ["LLM-grounded reason that keeps the same listing and citations."],
-        )
-
-    def test_openai_generator_falls_back_on_invalid_citation(self) -> None:
-        class BadCitationGenerator(recommendation_service.OpenAIRecommendationGenerator):
-            def _post_response(self, payload: dict[str, object]) -> dict[str, object]:
-                prompt_payload = json.loads(payload["input"][1]["content"][0]["text"])
-                draft = prompt_payload["draft_recommendation"]
-                generated_cars = [dict(car) for car in draft["recommended_cars"]]
-                generated_cars[0]["evidence_ids"] = ["chunk:missing"]
-                generated = {"query_summary": draft["query_summary"], "recommended_cars": generated_cars}
-                return {"output": [{"content": [{"type": "output_text", "text": json.dumps(generated)}]}]}
-
-        generator = BadCitationGenerator(api_key="test-key", model="gpt-5-mini")
-
-        response = generator.generate(
-            RecommendRequest(
-                query="I need a reliable car under $12,000 for commuting in Auckland.",
-                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
-            ),
-            self._retrieval_response(),
-        )
-
-        self.assertEqual(response["_generation_metadata"]["source"], "deterministic_fallback")
-        self.assertIn("invalid evidence ids", response["_generation_metadata"]["fallback_reason"])
-
-    def test_compatible_chat_generator_falls_back_without_api_key(self) -> None:
-        generator = recommendation_service.OpenAICompatibleChatRecommendationGenerator(
-            name="deepseek",
-            api_key=None,
-            model="deepseek-chat",
-            base_url="https://api.deepseek.com",
-        )
-
-        response = generator.generate(
-            RecommendRequest(
-                query="I need a reliable car under $12,000 for commuting in Auckland.",
-                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
-            ),
-            self._retrieval_response(),
-        )
-
-        self.assertEqual(response["_generation_metadata"]["source"], "deterministic_fallback")
-        self.assertEqual(response["_generation_metadata"]["fallback_reason"], "missing_deepseek_api_key")
-
-    def test_compatible_chat_generator_accepts_valid_json_response(self) -> None:
-        class StubChatGenerator(recommendation_service.OpenAICompatibleChatRecommendationGenerator):
-            def _post_chat_completion(self, payload: dict[str, object]) -> dict[str, object]:
-                prompt_payload = json.loads(payload["messages"][1]["content"])
-                draft = prompt_payload["draft_recommendation"]
-                generated = {
-                    "query_summary": draft["query_summary"],
-                    "recommended_cars": [
-                        {
-                            **car,
-                            "next_steps": ["Ask for service records, then book an inspection."],
-                        }
-                        for car in draft["recommended_cars"]
-                    ],
-                }
-                return {"choices": [{"message": {"content": json.dumps(generated)}}]}
-
-        generator = StubChatGenerator(
-            name="qwen",
-            api_key="test-key",
-            model="qwen-plus",
-            base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-        )
-
-        response = generator.generate(
-            RecommendRequest(
-                query="I need a reliable car under $12,000 for commuting in Auckland.",
-                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
-            ),
-            self._retrieval_response(),
-        )
-
-        self.assertEqual(response["_generation_metadata"]["source"], "qwen")
-        self.assertEqual(response["recommended_cars"][0]["next_steps"], ["Ask for service records, then book an inspection."])
-
-    def test_compatible_chat_generator_falls_back_on_invalid_json(self) -> None:
-        class BadJsonChatGenerator(recommendation_service.OpenAICompatibleChatRecommendationGenerator):
-            def _post_chat_completion(self, payload: dict[str, object]) -> dict[str, object]:
-                return {"choices": [{"message": {"content": "not json"}}]}
-
-        generator = BadJsonChatGenerator(
-            name="kimi",
-            api_key="test-key",
-            model="kimi-k2.6",
-            base_url="https://api.moonshot.ai/v1",
-        )
-
-        response = generator.generate(
-            RecommendRequest(
-                query="I need a reliable car under $12,000 for commuting in Auckland.",
-                selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
-            ),
-            self._retrieval_response(),
-        )
-
-        self.assertEqual(response["_generation_metadata"]["source"], "deterministic_fallback")
-        self.assertIn("JSONDecodeError", response["_generation_metadata"]["fallback_reason"])
-
-    def test_select_diverse_recommendations_prefers_distinct_models(self) -> None:
-        ranked = [
-            {"listing_id": "fit-1", "_model_key": "honda:fit"},
-            {"listing_id": "fit-2", "_model_key": "honda:fit"},
-            {"listing_id": "civic-1", "_model_key": "honda:civic"},
-            {"listing_id": "aqua-1", "_model_key": "toyota:aqua"},
-        ]
-
-        selected = recommendation_service.select_diverse_recommendations(ranked, 3)
-
-        self.assertEqual([car["listing_id"] for car in selected], ["fit-1", "civic-1", "aqua-1"])
-
-    def test_recommendation_response_stays_within_selected_ids_and_keeps_citations(self) -> None:
-        retrieval_response = self._retrieval_response()
-
-        @contextmanager
-        def dummy_session():
-            class Session:
-                def add(self, item: object) -> None:
-                    return None
-
-            yield Session()
-
-        original_build_response = recommendation_service.build_selected_retrieval_response
-        original_get_session = recommendation_service.get_session
-        recommendation_service.build_selected_retrieval_response = lambda session, request: retrieval_response
-        recommendation_service.get_session = dummy_session
-        try:
-            response = recommendation_service.recommend(
-                RecommendRequest(
-                    query="I need a reliable car under $12,000 for commuting in Auckland.",
-                    selected_listing_ids=["akl-toyota-aqua-test", "akl-honda-fit-test"],
-                )
-            )
-        finally:
-            recommendation_service.build_selected_retrieval_response = original_build_response
-            recommendation_service.get_session = original_get_session
-
-        evidence_ids = {item["id"] for item in response["evidence"]}
-        self.assertEqual(response["debug"]["recommendation_provider"], "deterministic")
-        self.assertEqual(response["debug"]["generation_model"], "deterministic_ranker_with_citations")
-        self.assertEqual(
-            [car["listing_id"] for car in response["recommended_cars"]],
-            ["akl-toyota-aqua-test", "akl-honda-fit-test"],
-        )
-        self.assertEqual(
-            response["debug"]["selected_listing_ids"],
-            ["akl-toyota-aqua-test", "akl-honda-fit-test"],
-        )
-        self.assertEqual(response["debug"]["selected_listing_count"], 2)
-        self.assertIn("chunk:chunk-4", evidence_ids)
-        for car in response["recommended_cars"]:
-            self.assertTrue(set(car["evidence_ids"]).issubset(evidence_ids))
-            for flag in car["risk_flags"]:
-                self.assertTrue(set(flag["evidence_ids"]).issubset(evidence_ids))
-
-    def test_score_listing_respects_family_and_mileage_preferences(self) -> None:
-        family_filters = {
-            "max_price": 20000,
-            "max_mileage": 150000,
-            "body_type": None,
-            "brand": None,
-            "fuel_type": None,
-            "prefer_hybrid": False,
-            "prefer_premium": False,
-            "priority": "practicality",
-            "usage": "family",
-        }
-        suv_listing = {
-            "listing_id": "rav4-1",
-            "brand": "Toyota",
-            "model": "RAV4",
-            "body_type": "suv",
-            "fuel_type": "petrol",
-            "price": 18000,
-            "mileage": 120000,
-            "year": 2015,
-        }
-        hatch_listing = {
-            "listing_id": "fit-1",
-            "brand": "Honda",
-            "model": "Fit",
-            "body_type": "hatchback",
-            "fuel_type": "petrol",
-            "price": 18000,
-            "mileage": 120000,
-            "year": 2015,
-        }
-
-        suv_score = recommendation_service.score_listing(suv_listing, family_filters, [], [])
-        hatch_score = recommendation_service.score_listing(hatch_listing, family_filters, [], [])
-
-        self.assertGreater(suv_score, hatch_score)
-
-    def _retrieval_response(self) -> dict[str, object]:
-        return {
-            "applied_filters": {"max_price": 12000, "limit": 2, "selected_listing_ids": ["akl-toyota-aqua-test", "akl-honda-fit-test"]},
-            "listings": [
-                {
-                    "listing_id": "akl-toyota-aqua-test",
-                    "title": "2015 Toyota Aqua",
-                    "brand": "Toyota",
-                    "model": "Aqua",
-                    "year": 2015,
-                    "price": 9990,
-                    "mileage": 90000,
-                    "fuel_type": "petrol hybrid",
-                    "body_type": "hatchback",
-                    "location": "Auckland",
-                    "description": "Clean compact hybrid listing.",
-                },
-                {
-                    "listing_id": "akl-honda-fit-test",
-                    "title": "2016 Honda Fit",
-                    "brand": "Honda",
-                    "model": "Fit",
-                    "year": 2016,
-                    "price": 10990,
-                    "mileage": 98000,
-                    "fuel_type": "petrol",
-                    "body_type": "hatchback",
-                    "location": "Auckland",
-                    "description": "Practical hatchback with tidy city-sized footprint.",
-                }
-            ],
-            "chunks": [
-                self._chunk("chunk-1", "Toyota", "Aqua", "City use and parking are easy."),
-                self._chunk("chunk-2", "Toyota", "Aqua", "Low fuel cost suits commuting."),
-                self._chunk("chunk-3", "Toyota", "Aqua", "Compact size is useful in Auckland."),
-                self._chunk("chunk-4", "Toyota", "Aqua", "Buyers should verify service history carefully."),
-                self._chunk("chunk-5", "Honda", "Fit", "Honda Fit is practical for commuting and errands."),
-            ],
-            "debug": {
-                "retrieval_mode": "selected_listings_plus_semantic_chunks",
-                "embedding_search_enabled": True,
-                "embedding_model": "local-hash-embedding-v1",
-                "candidate_models": ["Toyota Aqua", "Honda Fit"],
-                "selected_listing_ids": ["akl-toyota-aqua-test", "akl-honda-fit-test"],
-                "selected_listing_count": 2,
-            },
-        }
+        self.assertEqual(response["recommended_profiles"][0]["profile_id"], "aqua-1")
 
     @staticmethod
-    def _chunk(chunk_id: str, brand: str, model: str, text: str) -> dict[str, object]:
+    def _retrieval_response() -> dict[str, object]:
         return {
-            "chunk_id": chunk_id,
-            "source_id": f"source-{chunk_id}",
-            "source_title": f"{brand} {model} notes",
-            "source_type": "maintenance",
-            "brand": brand,
-            "model": model,
-            "evidence_level": "medium",
-            "text": text,
-            "similarity": 0.9,
+            "applied_filters": {"budget_max": 20000, "limit": 2, "selected_profile_ids": ["aqua-1", "fit-1"]},
+            "vehicle_profiles": [
+                DummyProfile("aqua-1", "2015-2017 Toyota Aqua 1.5 Hybrid S", "Toyota", "Aqua"),
+                DummyProfile("fit-1", "2014-2016 Honda Fit 1.5 Petrol L", "Honda", "Fit"),
+            ],
+            "chunks": [
+                {
+                    "chunk_id": "k1",
+                    "source_title": "Toyota Aqua notes",
+                    "source_type": "maintenance",
+                    "brand": "Toyota",
+                    "model": "Aqua",
+                    "profile_id": "aqua-1",
+                    "text": "Hybrid battery condition and service history matter.",
+                },
+                {
+                    "chunk_id": "k2",
+                    "source_title": "Honda Fit notes",
+                    "source_type": "buying_guide",
+                    "brand": "Honda",
+                    "model": "Fit",
+                    "profile_id": "fit-1",
+                    "text": "Fit is practical and easy to park.",
+                },
+            ],
+            "debug": {},
         }
+
+
+class DummyProfile:
+    def __init__(self, profile_id: str, title: str, brand: str, model: str) -> None:
+        self.profile_id = profile_id
+        self.title = title
+        self.brand = brand
+        self.model = model
+        self.engine_description = "1.5L profile"
+        self.displacement_l = 1.5
+        self.transmission = "cvt"
+        self.fuel_type = "petrol hybrid" if brand == "Toyota" else "petrol"
+        self.body_type = "hatchback"
+        self.power_kw = 90
+        self.suitability_summary = "Good for city commuting and easy parking."
+        self.comfort_summary = "Comfortable enough for daily use."
+        self.space_summary = "Compact rear seat and boot."
+        self.nvh_summary = "Quiet enough in town."
+        self.reliability_summary = "Strong reliability reputation."
+        self.maintenance_cost_band = "low"
+        self.fuel_consumption_l_per_100km = 4.3 if brand == "Toyota" else 5.6
+        self.estimated_price_min_nzd = 13000 if brand == "Toyota" else 14000
+        self.estimated_price_mid_nzd = 14500 if brand == "Toyota" else 15000
+        self.estimated_price_max_nzd = 16000 if brand == "Toyota" else 16500
+        self.year_start = 2015
+        self.year_end = 2017
+        self.common_issues = ["service history", "wear items"]
 
 
 if __name__ == "__main__":

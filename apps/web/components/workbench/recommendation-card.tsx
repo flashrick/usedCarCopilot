@@ -2,14 +2,14 @@
 
 import { BadgeAlert, ChevronRight, FileStack, ShieldAlert } from "lucide-react";
 import { useLocale } from "@/components/i18n/locale-provider";
-import { formatMoney, severityTone } from "@/lib/format";
+import { severityTone } from "@/lib/format";
 import { formatTemplate } from "@/lib/i18n";
-import type { RecommendedCar } from "@/lib/types";
+import type { RecommendedProfile } from "@/lib/types";
 
 type RecommendationCardProps = {
-  car: RecommendedCar;
+  car: RecommendedProfile;
   selected?: boolean;
-  onSelect?: (listingId: string) => void;
+  onSelect?: (profileId: string) => void;
 };
 
 export function RecommendationCard({ car, selected, onSelect }: RecommendationCardProps) {
@@ -25,7 +25,8 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
           <div>
             <p className="text-[11px] uppercase tracking-[0.22em] text-muted">{copy.recommendationCard.eyebrow}</p>
             <h3 className="mt-1 text-lg font-semibold tracking-tight">{car.title}</h3>
-            <p className="mt-1 text-sm text-muted">{car.price_commentary}</p>
+            <p className="mt-1 text-sm text-muted">{car.valuation_summary}</p>
+            <p className="mt-2 text-xs text-muted">{car.powertrain_summary}</p>
           </div>
           <div className="rounded-md bg-steelDeep px-3 py-2 text-right text-white shadow-inset">
             <div className="text-[11px] uppercase tracking-[0.18em] text-white/70">{copy.recommendationCard.match}</div>
@@ -55,14 +56,14 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               {car.risk_flags.map((flag) => (
-                <span key={`${car.listing_id}-${flag.label}`} className={`rounded-md px-2 py-1 text-xs font-medium ${severityTone(flag.severity)}`}>
+                <span key={`${car.profile_id}-${flag.label}`} className={`rounded-md px-2 py-1 text-xs font-medium ${severityTone(flag.severity)}`}>
                   {flag.label}
                 </span>
               ))}
             </div>
             <ul className="mt-3 space-y-2 text-xs text-muted">
               {car.risk_flags.map((flag) => (
-                <li key={`${car.listing_id}-detail-${flag.label}`} className="rounded-md bg-white px-3 py-2">
+                <li key={`${car.profile_id}-detail-${flag.label}`} className="rounded-md bg-white px-3 py-2">
                   {flag.reason}
                 </li>
               ))}
@@ -72,10 +73,10 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
 
         <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
           <div className="rounded-md bg-shell p-3">
-            <div className="text-sm font-medium">{copy.recommendationCard.nextSteps}</div>
+            <div className="text-sm font-medium">{copy.recommendationCard.tradeOffs}</div>
             <div className="mt-2 flex flex-wrap gap-2">
-              {car.next_steps.map((step) => (
-                <span key={`${car.listing_id}-${step}`} className="rounded-md bg-white px-3 py-2 text-xs text-muted">
+              {car.trade_offs.map((step) => (
+                <span key={`${car.profile_id}-${step}`} className="rounded-md bg-white px-3 py-2 text-xs text-muted">
                   {step}
                 </span>
               ))}
@@ -92,12 +93,22 @@ export function RecommendationCard({ car, selected, onSelect }: RecommendationCa
             </div>
             <button
               type="button"
-              onClick={() => onSelect?.(car.listing_id)}
+              onClick={() => onSelect?.(car.profile_id)}
               className="flex items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-steelDeep transition hover:border-steel/40 hover:bg-steelSoft/50"
             >
               {copy.recommendationCard.inspect}
               <ChevronRight className="h-4 w-4" />
             </button>
+          </div>
+        </div>
+        <div className="rounded-md bg-shell p-3">
+          <div className="text-sm font-medium">{copy.recommendationCard.nextSteps}</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {car.next_steps.map((step) => (
+              <span key={`${car.profile_id}-${step}`} className="rounded-md bg-white px-3 py-2 text-xs text-muted">
+                {step}
+              </span>
+            ))}
           </div>
         </div>
       </div>

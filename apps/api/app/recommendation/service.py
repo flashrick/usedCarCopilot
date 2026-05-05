@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from time import perf_counter
 from typing import Any, Protocol
 import urllib.error
@@ -11,81 +10,9 @@ from sqlalchemy import and_, or_, select
 
 from app.core.config import get_settings
 from app.db.connection import get_session
-from app.db.orm import KnowledgeSourceRecord, ListingRecord, RequestLogRecord
+from app.db.orm import KnowledgeSourceRecord, RequestLogRecord, VehicleProfileRecord
 from app.models.schemas import RecommendRequest, RetrieveRequest
-from app.retrieval.service import infer_filters, retrieve_semantic_chunks
-
-
-SOURCE_TYPE_MAP = {
-    "buying_guide": "buying_guide",
-    "driving_review": "review",
-    "inspection": "buying_guide",
-    "maintenance": "maintenance",
-    "owner_experience": "review",
-}
-
-RISK_PATTERNS = (
-    (
-        "Service history",
-        "medium",
-        ("service history", "service records", "service intervals", "service record"),
-        "Verify service records before shortlisting this car.",
-    ),
-    (
-        "Accident repair",
-        "medium",
-        ("accident repair", "body repair", "paint", "damage"),
-        "Check for prior repair quality and signs of accident damage.",
-    ),
-    (
-        "Used condition",
-        "medium",
-        ("used condition", "condition evidence", "clean service record", "neglected", "documentation"),
-        "Treat used condition and documentation as deciding factors, especially for buyers who want a low-risk choice.",
-    ),
-    (
-        "Trim and feature variation",
-        "low",
-        ("trim", "feature", "features", "equipment", "year"),
-        "Compare trim differences, feature variation by year, and safety equipment before paying a premium.",
-    ),
-    (
-        "Comfort or space trade-off",
-        "low",
-        ("comfort", "seat", "rear space", "boot space", "road noise"),
-        "Confirm seat comfort, small car comfort, road noise, and usable space against the intended driving pattern.",
-    ),
-    (
-        "Parking or body damage",
-        "low",
-        ("parking", "body repair", "paint", "panel gaps", "damage"),
-        "Check parking damage and body repair signs during the walk-around inspection.",
-    ),
-    (
-        "Hybrid system condition",
-        "medium",
-        ("hybrid battery", "hybrid system", "battery condition"),
-        "Hybrid condition should be checked because the matched evidence raises it as a buying point.",
-    ),
-    (
-        "Transmission behaviour",
-        "medium",
-        ("transmission behaviour", "transmission feel", "cvt", "gearbox"),
-        "Road test the transmission and confirm smooth operation.",
-    ),
-    (
-        "Tyres and brakes",
-        "low",
-        ("tyre", "tyres", "brake", "brakes"),
-        "Inspect tyres and brakes because wear items affect the true purchase cost.",
-    ),
-    (
-        "Suspension or warning lights",
-        "medium",
-        ("suspension", "warning lights", "warning light"),
-        "Include suspension noise and dashboard warnings in the inspection.",
-    ),
-)
+from app.retrieval.service import infer_filters, retrieve_semantic_chunks, score_profile
 
 
 OPENAI_DEFAULT_MODEL = "gpt-5-mini"
@@ -99,7 +26,7 @@ COMPATIBLE_PROVIDER_DEFAULT_MODELS = {
 RECOMMENDATION_OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["query_summary", "recommended_cars"],
+    "required": ["query_summary", "recommended_profiles"],
     "properties": {
         "query_summary": {
             "type": "object",
@@ -111,26 +38,30 @@ RECOMMENDATION_OUTPUT_SCHEMA: dict[str, Any] = {
                 "preferences": {"type": "array", "items": {"type": "string"}},
             },
         },
-        "recommended_cars": {
+        "recommended_profiles": {
             "type": "array",
             "items": {
                 "type": "object",
                 "additionalProperties": False,
                 "required": [
-                    "listing_id",
+                    "profile_id",
                     "title",
                     "match_score",
+                    "powertrain_summary",
                     "why_it_matches",
+                    "trade_offs",
                     "risk_flags",
-                    "price_commentary",
+                    "valuation_summary",
                     "evidence_ids",
                     "next_steps",
                 ],
                 "properties": {
-                    "listing_id": {"type": "string"},
+                    "profile_id": {"type": "string"},
                     "title": {"type": "string"},
                     "match_score": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "powertrain_summary": {"type": "string"},
                     "why_it_matches": {"type": "array", "items": {"type": "string"}},
+                    "trade_offs": {"type": "array", "items": {"type": "string"}},
                     "risk_flags": {
                         "type": "array",
                         "items": {
@@ -145,7 +76,7 @@ RECOMMENDATION_OUTPUT_SCHEMA: dict[str, Any] = {
                             },
                         },
                     },
-                    "price_commentary": {"type": "string"},
+                    "valuation_summary": {"type": "string"},
                     "evidence_ids": {"type": "array", "items": {"type": "string"}},
                     "next_steps": {"type": "array", "items": {"type": "string"}},
                 },
@@ -164,61 +95,53 @@ class RecommendationGenerator(Protocol):
 
 
 class RecommendationRequestError(ValueError):
-    """Raised when the selected-listing recommendation request is invalid."""
+    """Raised when the selected-profile recommendation request is invalid."""
 
 
 class DeterministicRecommendationGenerator:
     name = "deterministic"
 
-    def __init__(self, model: str = "deterministic_ranker_with_citations") -> None:
+    def __init__(self, model: str = "deterministic_variant_recommender_v1") -> None:
         self.model = model
 
     def generate(self, request: RecommendRequest, retrieval_response: dict[str, Any]) -> dict[str, Any]:
         filters = retrieval_response["applied_filters"]
-        listings = retrieval_response["listings"]
+        profiles = retrieval_response["vehicle_profiles"]
         chunks = retrieval_response["chunks"]
         evidence: dict[str, dict[str, str]] = {}
+        scored_profiles: list[dict[str, Any]] = []
 
-        scored_cars = []
-        for listing in listings:
-            relevant_chunks = find_relevant_chunks(listing, chunks)
-            risk_flags = build_risk_flags(listing, relevant_chunks)
-            match_score = score_listing(listing, filters, relevant_chunks, risk_flags)
+        for profile in profiles:
+            profile_score = max(35, min(99, score_profile(profile, filters)))
+            profile_chunks = find_relevant_chunks(profile, chunks)
+            profile_evidence_id = add_profile_evidence(profile, evidence)
+            chunk_evidence_ids = [add_chunk_evidence(chunk, evidence) for chunk in profile_chunks[:2]]
+            risk_flags = build_risk_flags(profile, profile_chunks, chunk_evidence_ids)
+            evidence_ids = [profile_evidence_id, *chunk_evidence_ids]
 
-            scored_cars.append(
+            scored_profiles.append(
                 {
-                    "listing_id": value_of(listing, "listing_id"),
-                    "title": value_of(listing, "title"),
-                    "match_score": match_score,
-                    "why_it_matches": build_reasons(listing, filters, relevant_chunks),
+                    "profile_id": profile.profile_id,
+                    "title": profile.title,
+                    "match_score": profile_score,
+                    "powertrain_summary": build_powertrain_summary(profile),
+                    "why_it_matches": build_reasons(profile, filters),
+                    "trade_offs": build_trade_offs(profile),
                     "risk_flags": risk_flags,
-                    "price_commentary": build_price_commentary(listing, filters),
-                    "evidence_ids": [],
-                    "next_steps": build_next_steps(listing, risk_flags),
-                    "_listing": listing,
-                    "_chunks": relevant_chunks,
-                    "_model_key": model_key(listing),
-                    "_price": value_of(listing, "price"),
-                    "_mileage": value_of(listing, "mileage"),
+                    "valuation_summary": build_valuation_summary(profile),
+                    "evidence_ids": evidence_ids,
+                    "next_steps": build_next_steps(profile, risk_flags),
+                    "_rank_key": (-profile_score, profile.estimated_price_mid_nzd or 10**9, profile.profile_id),
                 }
             )
 
-        ranked_cars = sorted(
-            scored_cars,
-            key=lambda car: (-car["match_score"], car["_price"] is None, car["_price"] or 0, car["_mileage"] or 0),
-        )
-        recommended_cars = ranked_cars
-        for car in recommended_cars:
-            car["evidence_ids"] = collect_evidence(car["_listing"], car["_chunks"], car["risk_flags"], evidence)
-            car.pop("_listing", None)
-            car.pop("_chunks", None)
-            car.pop("_model_key", None)
-            car.pop("_price", None)
-            car.pop("_mileage", None)
+        ranked_profiles = sorted(scored_profiles, key=lambda item: item["_rank_key"])
+        for item in ranked_profiles:
+            item.pop("_rank_key", None)
 
         return {
             "query_summary": build_query_summary(request.query, filters),
-            "recommended_cars": recommended_cars,
+            "recommended_profiles": ranked_profiles,
             "evidence": list(evidence.values()),
         }
 
@@ -270,10 +193,10 @@ class OpenAIRecommendationGenerator:
                         {
                             "type": "input_text",
                             "text": (
-                                "You are a used-car decision support generator. "
-                                "Return grounded JSON only. Keep the same listing_id order, titles, match_score values, "
-                                "and evidence_ids from the draft. Do not invent listings or citations. "
-                                "Rewrite reasons, risks, price commentary, and next steps only when the supplied evidence supports it."
+                                "You are a used-car variant decision support generator. "
+                                "Return grounded JSON only. Keep the same profile_id order, titles, match_score values, "
+                                "and evidence_ids from the draft. Do not invent profiles or citations. "
+                                "Rewrite reasons, trade-offs, risks, valuation wording, and next steps only when the supplied evidence supports it."
                             ),
                         }
                     ],
@@ -299,7 +222,7 @@ class OpenAIRecommendationGenerator:
             "text": {
                 "format": {
                     "type": "json_schema",
-                    "name": "used_car_recommendation",
+                    "name": "vehicle_profile_recommendation",
                     "schema": RECOMMENDATION_OUTPUT_SCHEMA,
                     "strict": True,
                 }
@@ -378,11 +301,11 @@ class OpenAICompatibleChatRecommendationGenerator:
                 {
                     "role": "system",
                     "content": (
-                        "You are a used-car decision support generator. Return valid JSON only. "
-                        "The JSON object must contain query_summary and recommended_cars. "
-                        "Keep the same listing_id order, titles, match_score values, and evidence_ids from the draft. "
-                        "Do not invent listings, citations, or evidence ids. "
-                        "Rewrite reasons, risks, price commentary, and next steps only when supplied evidence supports it."
+                        "You are a used-car variant decision support generator. Return valid JSON only. "
+                        "The JSON object must contain query_summary and recommended_profiles. "
+                        "Keep the same profile_id order, titles, match_score values, and evidence_ids from the draft. "
+                        "Do not invent profiles, citations, or evidence ids. "
+                        "Rewrite reasons, trade-offs, valuation commentary, and next steps only when supplied evidence supports it."
                     ),
                 },
                 {
@@ -426,51 +349,6 @@ class OpenAICompatibleChatRecommendationGenerator:
             raise RuntimeError(f"{self.name} request failed: {exc}") from exc
 
 
-def get_recommendation_generator(
-    provider_name: str | None = None,
-    model: str | None = None,
-    *,
-    openai_api_key: str | None = None,
-    openai_base_url: str = "https://api.openai.com/v1",
-    openai_timeout_seconds: float = 30,
-    deepseek_api_key: str | None = None,
-    deepseek_base_url: str = "https://api.deepseek.com",
-    qwen_api_key: str | None = None,
-    qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-    kimi_api_key: str | None = None,
-    kimi_base_url: str = "https://api.moonshot.ai/v1",
-) -> RecommendationGenerator:
-    provider = normalize(provider_name or "deterministic")
-    if provider in {"deterministic", "local deterministic"}:
-        return DeterministicRecommendationGenerator(model or "deterministic_ranker_with_citations")
-    if provider in {"openai", "openai responses"}:
-        selected_model = model
-        if not selected_model or selected_model == "deterministic_ranker_with_citations":
-            selected_model = OPENAI_DEFAULT_MODEL
-        return OpenAIRecommendationGenerator(
-            api_key=openai_api_key,
-            model=selected_model,
-            base_url=openai_base_url,
-            timeout_seconds=openai_timeout_seconds,
-        )
-    if provider in {"deepseek", "qwen", "kimi"}:
-        defaults = {
-            "deepseek": (deepseek_api_key, deepseek_base_url),
-            "qwen": (qwen_api_key, qwen_base_url),
-            "kimi": (kimi_api_key, kimi_base_url),
-        }
-        api_key, base_url = defaults[provider]
-        selected_model = selected_external_model(model, COMPATIBLE_PROVIDER_DEFAULT_MODELS[provider])
-        return OpenAICompatibleChatRecommendationGenerator(
-            name=provider,
-            api_key=api_key,
-            model=selected_model,
-            base_url=base_url,
-            timeout_seconds=openai_timeout_seconds,
-        )
-    raise ValueError(f"Unsupported recommendation provider: {provider_name}")
-
-
 def recommend(request: RecommendRequest) -> dict[str, Any]:
     started_at = perf_counter()
     settings = get_settings()
@@ -487,21 +365,19 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
         kimi_api_key=settings.kimi_api_key,
         kimi_base_url=settings.kimi_base_url,
     )
+
     with get_session() as session:
         retrieval_response = build_selected_retrieval_response(session, request)
-        filters = retrieval_response["applied_filters"]
-        listings = retrieval_response["listings"]
-        chunks = retrieval_response["chunks"]
         generated = generator.generate(request, retrieval_response)
         generation_metadata = generated.pop("_generation_metadata", {})
-
         latency_ms = int((perf_counter() - started_at) * 1000)
         session.add(
             RequestLogRecord(
                 endpoint="/recommend",
                 query=request.query,
-                filters=filters,
-                listing_count=len(generated["recommended_cars"]),
+                filters=retrieval_response["applied_filters"],
+                listing_count=0,
+                profile_count=len(generated["recommended_profiles"]),
                 knowledge_count=len(generated["evidence"]),
                 latency_ms=latency_ms,
             )
@@ -509,20 +385,19 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
 
     return {
         "query_summary": generated["query_summary"],
-        "recommended_cars": generated["recommended_cars"],
+        "recommended_profiles": generated["recommended_profiles"],
         "evidence": generated["evidence"],
         "debug": {
             "retrieval_mode": retrieval_response["debug"].get("retrieval_mode"),
             "embedding_search_enabled": retrieval_response["debug"].get("embedding_search_enabled"),
             "embedding_model": retrieval_response["debug"].get("embedding_model"),
             "candidate_models": retrieval_response["debug"].get("candidate_models", []),
-            "selected_listing_ids": retrieval_response["debug"].get("selected_listing_ids", []),
-            "selected_listing_count": retrieval_response["debug"].get("selected_listing_count", 0),
-            "retrieved_listing_count": len(listings),
-            "retrieved_chunk_count": len(chunks),
+            "selected_profile_ids": retrieval_response["debug"].get("selected_profile_ids", []),
+            "selected_profile_count": retrieval_response["debug"].get("selected_profile_count", 0),
+            "retrieved_profile_count": len(retrieval_response["vehicle_profiles"]),
+            "retrieved_chunk_count": len(retrieval_response["chunks"]),
             "recommendation_provider": generator.name,
             "recommendation_mode": generator.model,
-            "generation_model": generator.model,
             "generation_source": generation_metadata.get("source", generator.name),
             "generation_fallback_reason": generation_metadata.get("fallback_reason"),
             "latency_ms": latency_ms,
@@ -531,33 +406,33 @@ def recommend(request: RecommendRequest) -> dict[str, Any]:
 
 
 def build_selected_retrieval_response(session: Any, request: RecommendRequest) -> dict[str, Any]:
-    query, selected_listing_ids = validate_recommend_request(request)
-    listings = load_selected_listings(session, selected_listing_ids)
-    candidate_pairs = dedupe_model_pairs(listings)
-    filters = infer_filters(RetrieveRequest(query=query, location=None, limit=len(selected_listing_ids)))
-    filters["selected_listing_ids"] = selected_listing_ids
+    query, selected_profile_ids = validate_recommend_request(request)
+    profiles = load_selected_profiles(session, selected_profile_ids)
+    filters = infer_filters(RetrieveRequest(query=query, limit=len(selected_profile_ids)))
+    filters["selected_profile_ids"] = selected_profile_ids
+    candidate_pairs = dedupe_model_pairs(profiles)
+    knowledge = load_selected_knowledge(session, selected_profile_ids, candidate_pairs)
     semantic_chunks = retrieve_semantic_chunks(
         session=session,
         query=query,
         filters=filters,
         candidate_pairs=candidate_pairs,
-        limit=max(len(selected_listing_ids), 4),
+        selected_profile_ids=selected_profile_ids,
+        limit=max(len(selected_profile_ids), 4),
     )
-
     return {
         "query": query,
         "applied_filters": filters,
-        "listings": listings,
-        "knowledge": load_selected_knowledge(session, candidate_pairs),
+        "vehicle_profiles": profiles,
+        "knowledge": knowledge,
         "chunks": semantic_chunks,
         "debug": {
             "candidate_models": [f"{brand} {model}" for brand, model in candidate_pairs],
-            "selected_listing_ids": selected_listing_ids,
-            "selected_listing_count": len(selected_listing_ids),
-            "retrieval_mode": "selected_listings_plus_semantic_chunks",
+            "selected_profile_ids": selected_profile_ids,
+            "selected_profile_count": len(selected_profile_ids),
+            "retrieval_mode": "selected_profiles_plus_semantic_chunks",
             "embedding_search_enabled": bool(semantic_chunks),
             "embedding_model": get_settings().embedding_model,
-            "semantic_chunk_count": len(semantic_chunks),
         },
     }
 
@@ -566,134 +441,289 @@ def validate_recommend_request(request: RecommendRequest) -> tuple[str, list[str
     query = (request.query or "").strip()
     if not query:
         raise RecommendationRequestError("query is required")
-
-    selected_listing_ids = [listing_id.strip() for listing_id in request.selected_listing_ids if listing_id.strip()]
-    if len(selected_listing_ids) < 2:
-        raise RecommendationRequestError("select at least 2 listing ids")
-    if len(selected_listing_ids) > 4:
-        raise RecommendationRequestError("select no more than 4 listing ids")
-    if len(set(selected_listing_ids)) != len(selected_listing_ids):
-        raise RecommendationRequestError("selected listing ids must be unique")
-    return query, selected_listing_ids
-
-
-def load_selected_listings(session: Any, selected_listing_ids: list[str]) -> list[Any]:
-    rows = list(
-        session.scalars(
-            select(ListingRecord).where(ListingRecord.listing_id.in_(selected_listing_ids))
-        )
-    )
-    listings_by_id = {row.listing_id: row for row in rows}
-    missing_listing_ids = [listing_id for listing_id in selected_listing_ids if listing_id not in listings_by_id]
-    if missing_listing_ids:
-        raise RecommendationRequestError("selected listing ids not found: " + ", ".join(missing_listing_ids))
-    return [listings_by_id[listing_id] for listing_id in selected_listing_ids]
+    selected_profile_ids = [profile_id.strip() for profile_id in request.selected_profile_ids if profile_id.strip()]
+    if len(selected_profile_ids) < 2:
+        raise RecommendationRequestError("select at least 2 profile ids")
+    if len(selected_profile_ids) > 4:
+        raise RecommendationRequestError("select no more than 4 profile ids")
+    if len(set(selected_profile_ids)) != len(selected_profile_ids):
+        raise RecommendationRequestError("selected profile ids must be unique")
+    return query, selected_profile_ids
 
 
-def dedupe_model_pairs(listings: list[Any]) -> list[tuple[str, str]]:
-    pairs: list[tuple[str, str]] = []
-    for listing in listings:
-        pair = (str(value_of(listing, "brand")), str(value_of(listing, "model")))
-        if pair not in pairs:
-            pairs.append(pair)
-    return pairs
+def load_selected_profiles(session: Any, selected_profile_ids: list[str]) -> list[VehicleProfileRecord]:
+    rows = list(session.scalars(select(VehicleProfileRecord).where(VehicleProfileRecord.profile_id.in_(selected_profile_ids))))
+    profiles_by_id = {row.profile_id: row for row in rows}
+    missing_profile_ids = [profile_id for profile_id in selected_profile_ids if profile_id not in profiles_by_id]
+    if missing_profile_ids:
+        raise RecommendationRequestError("selected profile ids not found: " + ", ".join(missing_profile_ids))
+    return [profiles_by_id[profile_id] for profile_id in selected_profile_ids]
 
 
-def load_selected_knowledge(session: Any, candidate_pairs: list[tuple[str, str]]) -> list[Any]:
-    if not candidate_pairs:
-        return []
-
+def load_selected_knowledge(
+    session: Any,
+    selected_profile_ids: list[str],
+    candidate_pairs: list[tuple[str, str]],
+) -> list[KnowledgeSourceRecord]:
     return list(
         session.scalars(
             select(KnowledgeSourceRecord)
             .where(
                 or_(
-                    *[
-                        and_(KnowledgeSourceRecord.brand == brand, KnowledgeSourceRecord.model == model)
-                        for brand, model in candidate_pairs
-                    ]
+                    KnowledgeSourceRecord.profile_id.in_(selected_profile_ids),
+                    or_(
+                        *[
+                            and_(KnowledgeSourceRecord.brand == brand, KnowledgeSourceRecord.model == model)
+                            for brand, model in candidate_pairs
+                        ]
+                    ),
                 )
             )
-            .order_by(KnowledgeSourceRecord.evidence_level.desc(), KnowledgeSourceRecord.source_id.asc())
-            .limit(max(len(candidate_pairs) * 3, 10))
+            .order_by(KnowledgeSourceRecord.profile_id.is_(None), KnowledgeSourceRecord.source_id.asc())
+            .limit(max(len(candidate_pairs) * 3, 12))
         )
     )
 
 
-def with_generation_metadata(payload: dict[str, Any], metadata: dict[str, str]) -> dict[str, Any]:
-    payload = dict(payload)
-    payload["_generation_metadata"] = metadata
-    return payload
+def get_recommendation_generator(
+    provider_name: str | None = None,
+    model: str | None = None,
+    *,
+    openai_api_key: str | None = None,
+    openai_base_url: str = "https://api.openai.com/v1",
+    openai_timeout_seconds: float = 30,
+    deepseek_api_key: str | None = None,
+    deepseek_base_url: str = "https://api.deepseek.com",
+    qwen_api_key: str | None = None,
+    qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    kimi_api_key: str | None = None,
+    kimi_base_url: str = "https://api.moonshot.ai/v1",
+) -> RecommendationGenerator:
+    provider = normalize(provider_name or "deterministic")
+    if provider in {"deterministic", "local deterministic"}:
+        return DeterministicRecommendationGenerator(model or "deterministic_variant_recommender_v1")
+    if provider in {"openai", "openai responses"}:
+        selected_model = model if model and model != "deterministic_variant_recommender_v1" else OPENAI_DEFAULT_MODEL
+        return OpenAIRecommendationGenerator(
+            api_key=openai_api_key,
+            model=selected_model,
+            base_url=openai_base_url,
+            timeout_seconds=openai_timeout_seconds,
+        )
+    if provider in {"deepseek", "qwen", "kimi"}:
+        defaults = {
+            "deepseek": (deepseek_api_key, deepseek_base_url),
+            "qwen": (qwen_api_key, qwen_base_url),
+            "kimi": (kimi_api_key, kimi_base_url),
+        }
+        api_key, base_url = defaults[provider]
+        return OpenAICompatibleChatRecommendationGenerator(
+            name=provider,
+            api_key=api_key,
+            model=selected_external_model(model, COMPATIBLE_PROVIDER_DEFAULT_MODELS[provider]),
+            base_url=base_url,
+            timeout_seconds=openai_timeout_seconds,
+        )
+    raise ValueError(f"Unsupported recommendation provider: {provider_name}")
 
 
-def selected_external_model(model: str | None, default_model: str) -> str:
-    if not model or model == "deterministic_ranker_with_citations":
-        return default_model
-    return model
+def find_relevant_chunks(profile: VehicleProfileRecord, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    matched = [
+        chunk
+        for chunk in chunks
+        if chunk.get("profile_id") == profile.profile_id or (chunk.get("brand") == profile.brand and chunk.get("model") == profile.model)
+    ]
+    return matched[:3]
 
 
-def extract_response_text(response: dict[str, Any]) -> str | None:
-    output_text = response.get("output_text")
-    if isinstance(output_text, str):
-        return output_text
-
-    text_parts: list[str] = []
-    for item in response.get("output", []):
-        for content in item.get("content", []):
-            if content.get("type") in {"output_text", "text"} and isinstance(content.get("text"), str):
-                text_parts.append(content["text"])
-    if text_parts:
-        return "".join(text_parts)
-    return None
+def build_query_summary(query: str | None, filters: dict[str, Any]) -> dict[str, Any]:
+    budget = filters.get("budget_max")
+    usage = filters.get("usage") or "general used-car profile selection"
+    preferences = [value for value in [filters.get("fuel_type"), filters.get("body_type"), filters.get("transmission"), filters.get("priority")] if value]
+    return {
+        "budget": f"Under NZ${budget:,}" if isinstance(budget, int) else "Flexible budget",
+        "usage": usage.replace("_", " "),
+        "preferences": [str(item).replace("_", " ") for item in preferences],
+    }
 
 
-def extract_chat_completion_text(response: dict[str, Any]) -> str | None:
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices:
-        return None
-    message = choices[0].get("message", {})
-    content = message.get("content")
-    return content if isinstance(content, str) else None
+def build_powertrain_summary(profile: VehicleProfileRecord) -> str:
+    power = f"{profile.power_kw}kW" if profile.power_kw else (f"{profile.power_hp}hp" if profile.power_hp else "power output not stated")
+    displacement = f"{profile.displacement_l:.1f}L" if profile.displacement_l else profile.engine_description
+    return f"{displacement} · {profile.transmission.upper()} · {profile.fuel_type.title()} · {power}"
+
+
+def build_reasons(profile: VehicleProfileRecord, filters: dict[str, Any]) -> list[str]:
+    reasons = [profile.suitability_summary or "Strong fit for general used-car profile selection."]
+    if filters.get("budget_max") and profile.estimated_price_mid_nzd and profile.estimated_price_mid_nzd <= filters["budget_max"]:
+        reasons.append("Estimated market midpoint stays inside the current budget target.")
+    if filters.get("priority") == "low_running_cost" and (profile.fuel_consumption_l_per_100km or 99) <= 6.0:
+        reasons.append("Fuel economy is favorable for a running-cost-sensitive buyer.")
+    if filters.get("priority") == "premium_feel":
+        reasons.append(profile.nvh_summary or "This profile leans more refined than the cheaper mainstream alternatives.")
+    else:
+        reasons.append(profile.comfort_summary or "Comfort and usability align with the intended daily use.")
+    return dedupe_non_empty(reasons)
+
+
+def build_trade_offs(profile: VehicleProfileRecord) -> list[str]:
+    trade_offs = []
+    if profile.body_type == "suv":
+        trade_offs.append("SUV practicality comes with higher tyre, brake, and fuel exposure than a small hatchback.")
+    if "hybrid" in (profile.fuel_type or "").lower():
+        trade_offs.append("Lower fuel spend is attractive, but hybrid-system condition matters more than the badge alone.")
+    if (profile.fuel_consumption_l_per_100km or 0) >= 7.5:
+        trade_offs.append("Running costs will be higher than the most efficient hatchback options in the shortlist.")
+    if profile.maintenance_cost_band in {"medium_high", "high"}:
+        trade_offs.append("This version needs stronger maintenance evidence to justify its premium or complexity.")
+    trade_offs.append(profile.space_summary or "Always match cabin and cargo space to the real use case, not just the body style.")
+    return dedupe_non_empty(trade_offs)
+
+
+def build_risk_flags(
+    profile: VehicleProfileRecord,
+    chunks: list[dict[str, Any]],
+    chunk_evidence_ids: list[str],
+) -> list[dict[str, Any]]:
+    flags: list[dict[str, Any]] = []
+    maintenance_band = (profile.maintenance_cost_band or "").lower()
+    if maintenance_band in {"medium_high", "high"}:
+        flags.append(
+            {
+                "label": "Maintenance sensitivity",
+                "severity": "medium",
+                "reason": "This variant needs stronger service evidence because running-cost and complexity risk are higher than the simplest shortlist options.",
+                "evidence_ids": chunk_evidence_ids or [f"profile:{profile.profile_id}"],
+            }
+        )
+    if "hybrid" in (profile.fuel_type or "").lower():
+        flags.append(
+            {
+                "label": "Hybrid system check",
+                "severity": "medium",
+                "reason": "Battery health, warning lights, and hybrid maintenance history should be verified before treating fuel savings as guaranteed value.",
+                "evidence_ids": chunk_evidence_ids or [f"profile:{profile.profile_id}"],
+            }
+        )
+    if profile.body_type == "suv":
+        flags.append(
+            {
+                "label": "Higher wear-item cost",
+                "severity": "low",
+                "reason": "SUV profiles usually carry higher tyre, brake, and suspension spend than smaller commuter profiles.",
+                "evidence_ids": [f"profile:{profile.profile_id}"],
+            }
+        )
+    if not flags:
+        flags.append(
+            {
+                "label": "Routine used-car checks",
+                "severity": "low",
+                "reason": "Service history, tyres, brakes, and body condition still matter even on stronger-looking variants.",
+                "evidence_ids": chunk_evidence_ids or [f"profile:{profile.profile_id}"],
+            }
+        )
+    return flags
+
+
+def build_valuation_summary(profile: VehicleProfileRecord) -> str:
+    if profile.estimated_price_mid_nzd is None:
+        return "Deterministic valuation range unavailable."
+    return (
+        f"Estimated NZ fair range: NZ${profile.estimated_price_min_nzd:,}-NZ${profile.estimated_price_max_nzd:,} "
+        f"(midpoint NZ${profile.estimated_price_mid_nzd:,}) for a good-condition used example."
+    )
+
+
+def build_next_steps(profile: VehicleProfileRecord, risk_flags: list[dict[str, Any]]) -> list[str]:
+    steps = [
+        "Confirm service history and version-specific equipment before shopping the market.",
+        "Use the valuation band as a negotiation anchor, not as a guaranteed ask price.",
+        "Shortlist real cars only after this profile's gearbox, fuel system, and space trade-offs still fit.",
+    ]
+    if any(flag["label"] == "Hybrid system check" for flag in risk_flags):
+        steps.append("Prioritize hybrid battery health, warning-light scan, and cooling-system service evidence.")
+    return dedupe_non_empty(steps)
+
+
+def add_profile_evidence(profile: VehicleProfileRecord, evidence: dict[str, dict[str, str]]) -> str:
+    evidence_id = f"profile:{profile.profile_id}"
+    evidence.setdefault(
+        evidence_id,
+        {
+            "id": evidence_id,
+            "source_type": "vehicle_profile",
+            "title": profile.title,
+            "snippet": f"{profile.engine_description}; {profile.suitability_summary or profile.comfort_summary or profile.space_summary or profile.reliability_summary or ''}",
+        },
+    )
+    return evidence_id
+
+
+def add_chunk_evidence(chunk: dict[str, Any], evidence: dict[str, dict[str, str]]) -> str:
+    evidence_id = f"chunk:{chunk['chunk_id']}"
+    evidence.setdefault(
+        evidence_id,
+        {
+            "id": evidence_id,
+            "source_type": str(chunk["source_type"]),
+            "title": str(chunk["source_title"]),
+            "snippet": trim(str(chunk["text"]), 180),
+        },
+    )
+    return evidence_id
+
+
+def dedupe_model_pairs(profiles: list[VehicleProfileRecord]) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for profile in profiles:
+        pair = (profile.brand, profile.model)
+        if pair not in pairs:
+            pairs.append(pair)
+    return pairs
 
 
 def validate_llm_recommendation_payload(generated: dict[str, Any], draft: dict[str, Any]) -> dict[str, Any]:
-    draft_cars = draft.get("recommended_cars", [])
-    generated_cars = generated.get("recommended_cars", [])
-    if len(generated_cars) != len(draft_cars):
+    draft_profiles = draft.get("recommended_profiles", [])
+    generated_profiles = generated.get("recommended_profiles", [])
+    if len(generated_profiles) != len(draft_profiles):
         raise ValueError("generated recommendation count does not match draft")
 
     evidence = draft.get("evidence", [])
     evidence_ids = {item["id"] for item in evidence}
-    validated_cars: list[dict[str, Any]] = []
-    for generated_car, draft_car in zip(generated_cars, draft_cars, strict=True):
-        if generated_car.get("listing_id") != draft_car.get("listing_id"):
-            raise ValueError("generated listing order or ids changed")
-        if generated_car.get("title") != draft_car.get("title"):
-            raise ValueError("generated listing title changed")
-        if generated_car.get("match_score") != draft_car.get("match_score"):
+    validated_profiles: list[dict[str, Any]] = []
+    for generated_profile, draft_profile in zip(generated_profiles, draft_profiles, strict=True):
+        if generated_profile.get("profile_id") != draft_profile.get("profile_id"):
+            raise ValueError("generated profile order or ids changed")
+        if generated_profile.get("title") != draft_profile.get("title"):
+            raise ValueError("generated profile title changed")
+        if generated_profile.get("match_score") != draft_profile.get("match_score"):
             raise ValueError("generated match score changed")
 
-        car_evidence_ids = list(generated_car.get("evidence_ids", []))
-        if not car_evidence_ids or not set(car_evidence_ids).issubset(evidence_ids):
-            raise ValueError(f"{generated_car.get('listing_id')} has invalid evidence ids")
+        profile_evidence_ids = list(generated_profile.get("evidence_ids", []))
+        if not profile_evidence_ids or not set(profile_evidence_ids).issubset(evidence_ids):
+            raise ValueError(f"{generated_profile.get('profile_id')} has invalid evidence ids")
 
-        risk_flags = list(generated_car.get("risk_flags", []))
+        risk_flags = list(generated_profile.get("risk_flags", []))
         for flag in risk_flags:
             flag_evidence_ids = list(flag.get("evidence_ids", []))
             if not flag_evidence_ids or not set(flag_evidence_ids).issubset(evidence_ids):
-                raise ValueError(f"{generated_car.get('listing_id')} risk flag has invalid evidence ids")
+                raise ValueError(f"{generated_profile.get('profile_id')} risk flag has invalid evidence ids")
 
-        validated_car = {
-            "listing_id": generated_car["listing_id"],
-            "title": generated_car["title"],
-            "match_score": generated_car["match_score"],
-            "why_it_matches": non_empty_strings(generated_car.get("why_it_matches")) or draft_car["why_it_matches"],
-            "risk_flags": risk_flags or draft_car["risk_flags"],
-            "price_commentary": generated_car.get("price_commentary") or draft_car["price_commentary"],
-            "evidence_ids": car_evidence_ids,
-            "next_steps": non_empty_strings(generated_car.get("next_steps")) or draft_car["next_steps"],
-        }
-        validated_cars.append(validated_car)
+        validated_profiles.append(
+            {
+                "profile_id": generated_profile["profile_id"],
+                "title": generated_profile["title"],
+                "match_score": generated_profile["match_score"],
+                "powertrain_summary": generated_profile.get("powertrain_summary") or draft_profile["powertrain_summary"],
+                "why_it_matches": non_empty_strings(generated_profile.get("why_it_matches")) or draft_profile["why_it_matches"],
+                "trade_offs": non_empty_strings(generated_profile.get("trade_offs")) or draft_profile["trade_offs"],
+                "risk_flags": risk_flags or draft_profile["risk_flags"],
+                "valuation_summary": generated_profile.get("valuation_summary") or draft_profile["valuation_summary"],
+                "evidence_ids": profile_evidence_ids,
+                "next_steps": non_empty_strings(generated_profile.get("next_steps")) or draft_profile["next_steps"],
+            }
+        )
 
     query_summary = generated.get("query_summary")
     if not isinstance(query_summary, dict):
@@ -705,9 +735,21 @@ def validate_llm_recommendation_payload(generated: dict[str, Any], draft: dict[s
             "usage": str(query_summary.get("usage") or draft["query_summary"]["usage"]),
             "preferences": non_empty_strings(query_summary.get("preferences")) or draft["query_summary"]["preferences"],
         },
-        "recommended_cars": validated_cars,
+        "recommended_profiles": validated_profiles,
         "evidence": evidence,
     }
+
+
+def with_generation_metadata(payload: dict[str, Any], metadata: dict[str, str]) -> dict[str, Any]:
+    payload = dict(payload)
+    payload["_generation_metadata"] = metadata
+    return payload
+
+
+def selected_external_model(model: str | None, default_model: str) -> str:
+    if not model or model == "deterministic_variant_recommender_v1":
+        return default_model
+    return model
 
 
 def non_empty_strings(value: Any) -> list[str]:
@@ -716,464 +758,39 @@ def non_empty_strings(value: Any) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
-def select_diverse_recommendations(ranked_cars: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
-    selected: list[dict[str, Any]] = []
-    selected_ids: set[str] = set()
-    seen_models: set[str] = set()
-
-    for car in ranked_cars:
-        model = car["_model_key"]
-        if model in seen_models:
-            continue
-        selected.append(car)
-        selected_ids.add(car["listing_id"])
-        seen_models.add(model)
-        if len(selected) >= limit:
-            return selected
-
-    for car in ranked_cars:
-        if car["listing_id"] in selected_ids:
-            continue
-        selected.append(car)
-        selected_ids.add(car["listing_id"])
-        if len(selected) >= limit:
-            break
-    return selected
-
-
-def collect_evidence(
-    listing: Any,
-    chunks: list[Any],
-    risk_flags: list[dict[str, Any]],
-    evidence: dict[str, dict[str, str]],
-) -> list[str]:
-    evidence_ids = [add_listing_evidence(listing, evidence)]
-    chunks_by_evidence_id = {f"chunk:{value_of(chunk, 'chunk_id')}": chunk for chunk in chunks}
-    cited_chunk_ids = [
-        evidence_id
-        for flag in risk_flags
-        for evidence_id in flag.get("evidence_ids", [])
-        if evidence_id.startswith("chunk:")
-    ]
-    selected_chunks = list(chunks[:3])
-    selected_chunk_ids = {f"chunk:{value_of(chunk, 'chunk_id')}" for chunk in selected_chunks}
-    for evidence_id in cited_chunk_ids:
-        chunk = chunks_by_evidence_id.get(evidence_id)
-        if chunk is not None and evidence_id not in selected_chunk_ids:
-            selected_chunks.append(chunk)
-            selected_chunk_ids.add(evidence_id)
-
-    for chunk in selected_chunks:
-        evidence_ids.append(add_chunk_evidence(chunk, evidence))
-    return dedupe(evidence_ids)
-
-
-def add_listing_evidence(listing: Any, evidence: dict[str, dict[str, str]]) -> str:
-    listing_id = value_of(listing, "listing_id")
-    evidence_id = f"listing:{listing_id}"
-    if evidence_id not in evidence:
-        facts = [
-            value_of(listing, "title"),
-            format_money(value_of(listing, "price")),
-            format_km(value_of(listing, "mileage")),
-            value_of(listing, "fuel_type"),
-            value_of(listing, "body_type"),
-            value_of(listing, "description"),
-        ]
-        evidence[evidence_id] = {
-            "id": evidence_id,
-            "source_type": "listing",
-            "title": value_of(listing, "title"),
-            "snippet": trim(" | ".join(str(fact) for fact in facts if fact), 320),
-        }
-    return evidence_id
-
-
-def add_chunk_evidence(chunk: Any, evidence: dict[str, dict[str, str]]) -> str:
-    chunk_id = value_of(chunk, "chunk_id")
-    evidence_id = f"chunk:{chunk_id}"
-    if evidence_id not in evidence:
-        source_type = value_of(chunk, "source_type")
-        evidence[evidence_id] = {
-            "id": evidence_id,
-            "source_type": SOURCE_TYPE_MAP.get(str(source_type), str(source_type or "buying_guide")),
-            "title": value_of(chunk, "source_title"),
-            "snippet": trim(value_of(chunk, "text") or "", 320),
-        }
-    return evidence_id
-
-
-def find_relevant_chunks(listing: Any, chunks: list[Any]) -> list[Any]:
-    brand = normalize(value_of(listing, "brand"))
-    model = normalize(value_of(listing, "model"))
-    matching = [
-        chunk
-        for chunk in chunks
-        if normalize(value_of(chunk, "brand")) == brand and normalize(value_of(chunk, "model")) == model
-    ]
-    if matching:
-        return matching
-    return chunks[:2]
-
-
-def score_listing(listing: Any, filters: dict[str, Any], chunks: list[Any], risk_flags: list[dict[str, Any]]) -> int:
-    score = 52
-    price = value_of(listing, "price")
-    listing_brand = normalize(value_of(listing, "brand"))
-    listing_model = normalize(value_of(listing, "model"))
-    listing_body_type = normalize(value_of(listing, "body_type"))
-    listing_fuel_type = normalize(value_of(listing, "fuel_type"))
-    max_price = filters.get("max_price")
-    if price is None:
-        score -= 10
-    elif max_price is not None and price <= max_price:
-        score += 18
-        if price <= max_price * 0.85:
-            score += 5
-    elif max_price is None:
-        score += 4
-    else:
-        score -= 18
-
-    mileage = value_of(listing, "mileage")
-    if mileage is not None:
-        if mileage <= 90_000:
-            score += 11
-        elif mileage <= 130_000:
-            score += 7
-        elif mileage <= 170_000:
-            score += 1
-        else:
-            score -= 8
-    max_mileage = filters.get("max_mileage")
-    if max_mileage is not None:
-        if mileage is None:
-            score -= 12
-        elif mileage <= max_mileage:
-            score += 9
-            if mileage <= max_mileage * 0.85:
-                score += 3
-        else:
-            score -= 15
-
-    year = value_of(listing, "year")
-    if year is not None:
-        if year >= 2017:
-            score += 9
-        elif year >= 2013:
-            score += 5
-        elif year <= 2010:
-            score -= 4
-
-    if filters.get("body_type") and listing_body_type == normalize(filters["body_type"]):
-        score += 5
-    if filters.get("brand") and listing_brand == normalize(filters["brand"]):
-        score += 4
-    if filters.get("fuel_type"):
-        if filters["fuel_type"] in listing_fuel_type:
-            score += 12
-        else:
-            score -= 14
-    if filters.get("prefer_hybrid") and "hybrid" in listing_fuel_type:
-        score += 8
-    if filters.get("prefer_premium") and year and year >= 2015:
-        score += 5
-    usage = filters.get("usage")
-    priority = filters.get("priority")
-    if usage in {"commute", "daily_commute", "city", "short_city_trips", "daily_use"}:
-        if listing_body_type == "hatchback":
-            score += 6
-        elif listing_body_type == "suv":
-            score -= 2
-    if usage in {"family", "small_family_errands"}:
-        if listing_body_type == "suv":
-            score += 9
-        elif listing_body_type == "hatchback":
-            score -= 4
-        if (listing_brand, listing_model) == ("toyota", "prius"):
-            score += 4
-    if usage in {"highway", "rideshare"}:
-        if listing_body_type in {"sedan", "suv"}:
-            score += 6
-        elif listing_body_type == "hatchback":
-            score -= 2
-        if year is not None and year >= 2014:
-            score += 3
-    if priority in {"fuel_economy", "cheap_to_run", "efficiency", "low_running_cost", "city_driving"}:
-        if "hybrid" in listing_fuel_type:
-            score += 10
-        if listing_body_type == "hatchback":
-            score += 4
-    if priority in {"practicality", "space_practicality"}:
-        if listing_body_type == "suv":
-            score += 10
-        elif listing_body_type == "hatchback":
-            score -= 3
-    if filters.get("priority") == "low_risk":
-        preferred_low_risk_models = {
-            ("toyota", "aqua"): 14,
-            ("honda", "fit"): 18,
-            ("mazda", "mazda3"): 12,
-        }
-        listing_model_key = (listing_brand, listing_model)
-        if listing_model_key in preferred_low_risk_models:
-            score += preferred_low_risk_models[listing_model_key]
-        if listing_body_type == "suv":
-            score -= 8
-        if price is not None and price > 20_000:
-            score -= 5
-    if filters.get("priority") == "safer_choice" and year is not None and year <= 2011:
-        score -= 3
-    if chunks:
-        score += min(10, 3 * len(chunks))
-
-    risk_penalty = sum({"low": 1, "medium": 3, "high": 7}.get(flag["severity"], 2) for flag in risk_flags)
-    return max(0, min(100, score - risk_penalty))
-
-
-def build_reasons(listing: Any, filters: dict[str, Any], chunks: list[Any]) -> list[str]:
-    reasons: list[str] = []
-    price = value_of(listing, "price")
-    max_price = filters.get("max_price")
-    if price is not None and max_price is not None and price <= max_price:
-        reasons.append(f"Fits the budget at {format_money(price)} against a {format_money(max_price)} ceiling.")
-    elif price is not None:
-        reasons.append(f"Has a visible listing price of {format_money(price)} for comparison.")
-
-    location = value_of(listing, "location")
-    body_type = value_of(listing, "body_type")
-    if location:
-        reasons.append(f"Available in {location}, matching the local search area.")
-    if body_type:
-        reasons.append(f"Matches a {body_type} body style.")
-
-    mileage = value_of(listing, "mileage")
-    year = value_of(listing, "year")
-    if mileage is not None and mileage <= 130_000:
-        reasons.append(f"Mileage is relatively usable for the seed set at {format_km(mileage)}.")
-    if year is not None and year >= 2015:
-        reasons.append(f"The {year} model year is newer than many budget candidates in the current data.")
-    if filters.get("prefer_hybrid") and "hybrid" in normalize(value_of(listing, "fuel_type")):
-        reasons.append("Hybrid fuel type supports the low-running-cost intent.")
-
-    evidence_reason = strongest_evidence_reason(chunks)
-    if evidence_reason:
-        reasons.append(evidence_reason)
-
-    return reasons[:5] or ["Ranked from the available structured listing data and retrieved model evidence."]
-
-
-def strongest_evidence_reason(chunks: list[Any]) -> str | None:
-    for chunk in chunks:
-        text = value_of(chunk, "text") or ""
-        normalized = normalize(text)
-        if "city" in normalized or "parking" in normalized:
-            return "Retrieved model evidence supports city use or easy parking."
-        if "family" in normalized or "space" in normalized or "boot" in normalized:
-            return "Retrieved model evidence discusses practical space or family fit."
-        if "fuel" in normalized or "running cost" in normalized or "hybrid" in normalized:
-            return "Retrieved model evidence supports running-cost evaluation."
-        if "comfort" in normalized or "highway" in normalized:
-            return "Retrieved model evidence discusses comfort or highway use."
-    return None
-
-
-def build_risk_flags(listing: Any, chunks: list[Any]) -> list[dict[str, Any]]:
-    flags: list[dict[str, Any]] = []
-    listing_evidence_id = f"listing:{value_of(listing, 'listing_id')}"
-    mileage = value_of(listing, "mileage")
-    if mileage is not None and mileage >= 180_000:
-        flags.append(
-            {
-                "label": "High mileage",
-                "severity": "high",
-                "reason": f"The listing shows {format_km(mileage)}, so condition evidence matters more than model reputation.",
-                "evidence_ids": [listing_evidence_id],
-            }
-        )
-    elif mileage is not None and mileage >= 140_000:
-        flags.append(
-            {
-                "label": "Higher mileage",
-                "severity": "medium",
-                "reason": f"The listing shows {format_km(mileage)}, which should trigger closer service and wear checks.",
-                "evidence_ids": [listing_evidence_id],
-            }
-        )
-
-    year = value_of(listing, "year")
-    if year is not None and year <= 2010:
-        flags.append(
-            {
-                "label": "Older vehicle age",
-                "severity": "medium",
-                "reason": f"The listing is a {year} vehicle, so age-related wear and safety equipment variation should be checked.",
-                "evidence_ids": [listing_evidence_id],
-            }
-        )
-
-    owner_count = extract_owner_count(value_of(listing, "description"))
-    if owner_count and owner_count >= 3:
-        flags.append(
-            {
-                "label": "Multiple previous owners",
-                "severity": "medium",
-                "reason": f"The listing text mentions {owner_count} owners, so documentation and condition checks matter.",
-                "evidence_ids": [listing_evidence_id],
-            }
-        )
-
-    if value_of(listing, "price") is None:
-        flags.append(
-            {
-                "label": "Missing listing price",
-                "severity": "medium",
-                "reason": "The listing has no visible price, so it cannot be compared cleanly on value.",
-                "evidence_ids": [listing_evidence_id],
-            }
-        )
-
-    seen_labels = {flag["label"] for flag in flags}
-    for label, severity, terms, reason in RISK_PATTERNS:
-        chunk_ids = [
-            f"chunk:{value_of(chunk, 'chunk_id')}"
-            for chunk in chunks
-            if any(term in normalize(value_of(chunk, "text")) for term in terms)
-        ]
-        if chunk_ids and label not in seen_labels:
-            flags.append(
-                {
-                    "label": label,
-                    "severity": severity,
-                    "reason": reason,
-                    "evidence_ids": dedupe(chunk_ids)[:2],
-                }
-            )
-            seen_labels.add(label)
-        if len(flags) >= 5:
-            break
-    return flags
-
-
-def build_price_commentary(listing: Any, filters: dict[str, Any]) -> str:
-    price = value_of(listing, "price")
-    max_price = filters.get("max_price")
-    if price is None:
-        return "No price is visible in the seed listing, so value cannot be judged until the seller confirms it."
-    if max_price is None:
-        return f"Listed at {format_money(price)}. Compare against similar year, mileage, and condition examples."
-    if price <= max_price:
-        headroom = max_price - price
-        return f"Listed at {format_money(price)}, which is {format_money(headroom)} under the stated budget."
-    return f"Listed at {format_money(price)}, which is above the stated {format_money(max_price)} budget."
-
-
-def build_next_steps(listing: Any, risk_flags: list[dict[str, Any]]) -> list[str]:
-    steps = [
-        "Ask for service history and ownership documentation.",
-        "Book a pre-purchase inspection before committing.",
-    ]
-    risk_labels = {normalize(flag["label"]) for flag in risk_flags}
-    if "hybrid system condition" in risk_labels:
-        steps.append("Ask for hybrid battery or hybrid-system health evidence.")
-    if "transmission behaviour" in risk_labels:
-        steps.append("Road test from cold and check for hesitation, shudder, or warning lights.")
-    if "tyres and brakes" in risk_labels or "high mileage" in risk_labels or "higher mileage" in risk_labels:
-        steps.append("Use tyre, brake, and wear-item findings when negotiating price.")
-    return steps[:4]
-
-
-def build_query_summary(query: str | None, filters: dict[str, Any]) -> dict[str, Any]:
-    preferences: list[str] = []
-    if filters.get("location"):
-        preferences.append(f"Location: {filters['location']}")
-    if filters.get("brand"):
-        preferences.append(f"Brand: {filters['brand']}")
-    elif filters.get("brands"):
-        preferences.append("Brands: " + ", ".join(filters["brands"]))
-    if filters.get("body_type"):
-        preferences.append(f"Body type: {filters['body_type']}")
-    if filters.get("models"):
-        preferences.append("Models: " + ", ".join(filters["models"]))
-    if filters.get("prefer_hybrid"):
-        preferences.append("Low running costs or hybrid preference")
-    if filters.get("fuel_type"):
-        preferences.append(f"Fuel: {filters['fuel_type']}")
-    if filters.get("max_mileage"):
-        preferences.append(f"Mileage under {format_km(filters['max_mileage'])}")
-    if filters.get("prefer_premium"):
-        preferences.append("More premium or comfortable feel")
-
-    return {
-        "budget": f"Up to {format_money(filters['max_price'])}" if filters.get("max_price") else "Not specified",
-        "usage": infer_usage(query or ""),
-        "preferences": preferences,
-    }
-
-
-def infer_usage(query: str) -> str:
-    normalized = normalize(query)
-    if "uber" in normalized or "rideshare" in normalized:
-        return "rideshare or high-use driving"
-    if "family" in normalized or "child" in normalized or "children" in normalized:
-        return "family and everyday use"
-    if "highway" in normalized or "hamilton" in normalized:
-        return "highway or intercity driving"
-    if "city" in normalized or "park" in normalized or "commut" in normalized:
-        return "city commuting"
-    if "first car" in normalized or "new driver" in normalized:
-        return "first car"
-    return "general used-car shortlisting"
-
-
-def extract_owner_count(description: str | None) -> int | None:
-    if not description:
-        return None
-    match = re.search(r"had\s+([0-9]+)\s+owners?", description, flags=re.IGNORECASE)
-    if not match:
-        return None
-    return int(match.group(1))
-
-
-def value_of(item: Any, key: str, default: Any = None) -> Any:
-    if isinstance(item, dict):
-        return item.get(key, default)
-    return getattr(item, key, default)
-
-
-def model_key(listing: Any) -> str:
-    return f"{normalize(value_of(listing, 'brand'))}:{normalize(value_of(listing, 'model'))}"
-
-
-def normalize(value: Any) -> str:
-    text = "" if value is None else str(value).lower()
-    text = text.replace("-", " ")
-    text = re.sub(r"[^a-z0-9]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def format_money(value: int | None) -> str | None:
-    if value is None:
-        return None
-    return f"${value:,.0f}"
-
-
-def format_km(value: int | None) -> str | None:
-    if value is None:
-        return None
-    return f"{value:,.0f} km"
-
-
-def trim(text: str, limit: int) -> str:
-    normalized = re.sub(r"\s+", " ", text).strip()
-    if len(normalized) <= limit:
-        return normalized
-    return normalized[: limit - 3].rstrip() + "..."
-
-
-def dedupe(values: list[str]) -> list[str]:
-    output: list[str] = []
+def dedupe_non_empty(values: list[str]) -> list[str]:
+    deduped: list[str] = []
     for value in values:
-        if value and value not in output:
-            output.append(value)
-    return output
+        normalized = value.strip()
+        if normalized and normalized not in deduped:
+            deduped.append(normalized)
+    return deduped
+
+
+def extract_response_text(response: dict[str, Any]) -> str | None:
+    output_text = response.get("output_text")
+    if isinstance(output_text, str):
+        return output_text
+    text_parts: list[str] = []
+    for item in response.get("output", []):
+        for content in item.get("content", []):
+            if content.get("type") in {"output_text", "text"} and isinstance(content.get("text"), str):
+                text_parts.append(content["text"])
+    return "".join(text_parts) if text_parts else None
+
+
+def extract_chat_completion_text(response: dict[str, Any]) -> str | None:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    message = choices[0].get("message", {})
+    content = message.get("content")
+    return content if isinstance(content, str) else None
+
+
+def normalize(value: str) -> str:
+    return value.strip().lower()
+
+
+def trim(value: str, length: int) -> str:
+    return value if len(value) <= length else f"{value[: length - 3].rstrip()}..."

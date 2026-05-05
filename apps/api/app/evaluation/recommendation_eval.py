@@ -9,9 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from app.evaluation.retrieval_eval import (
-    MODEL_ALIASES,
     average,
+    canonical_model_name,
     load_eval_cases,
+    MODEL_ALIASES,
     normalize_text,
     post_retrieve,
     ratio,
@@ -36,10 +37,11 @@ def run_recommendation_eval(config: RecommendationEvalConfig) -> dict[str, Any]:
 
 def evaluate_case(case: dict[str, Any], config: RecommendationEvalConfig) -> dict[str, Any]:
     retrieval_response = post_retrieve(config.api_url, case["query"], config.retrieve_limit, config.timeout_seconds)
-    selected_listing_ids = shortlist_listing_ids(retrieval_response, config.limit)
-    if len(selected_listing_ids) < 2:
-        expected_models = [canonical_model_name(model) for model in case.get("expected_candidate_models", [])]
-        expected_risks = case.get("expected_risk_themes", [])
+    selected_profile_ids = shortlist_profile_ids(retrieval_response, config.limit)
+    expected_models = [canonical_model_name(model) for model in case.get("expected_candidate_models", [])]
+    expected_risks = case.get("expected_risk_themes", [])
+
+    if len(selected_profile_ids) < 2:
         return {
             "id": case["id"],
             "query": case["query"],
@@ -51,22 +53,18 @@ def evaluate_case(case: dict[str, Any], config: RecommendationEvalConfig) -> dic
             "risk_theme_hits": [],
             "risk_theme_recall": 0.0,
             "citation_score": 0.0,
-            "citation_failures": ["recommendation skipped because retrieval returned fewer than 2 selectable listings"],
+            "citation_failures": ["recommendation skipped because retrieval returned fewer than 2 selectable profiles"],
             "recommendation_count": 0,
             "evidence_count": 0,
             "recommendation_mode": None,
             "embedding_model": retrieval_response.get("debug", {}).get("embedding_model"),
-            "selected_listing_ids": selected_listing_ids,
-            "selected_listing_count": len(selected_listing_ids),
+            "selected_profile_ids": selected_profile_ids,
             "error": "insufficient_shortlist",
         }
 
-    response = post_recommend(config.api_url, case["query"], selected_listing_ids, config.timeout_seconds)
-    expected_models = [canonical_model_name(model) for model in case.get("expected_candidate_models", [])]
+    response = post_recommend(config.api_url, case["query"], selected_profile_ids, config.timeout_seconds)
     recommended_models = sorted(extract_recommended_models(response))
     model_hits = [model for model in expected_models if model in recommended_models]
-
-    expected_risks = case.get("expected_risk_themes", [])
     recommendation_text = collect_recommendation_text(response)
     risk_hits = [theme for theme in expected_risks if risk_theme_matches(theme, recommendation_text)]
     citation_score, citation_failures = score_citations(response)
@@ -83,12 +81,11 @@ def evaluate_case(case: dict[str, Any], config: RecommendationEvalConfig) -> dic
         "risk_theme_recall": ratio(len(risk_hits), len(expected_risks)),
         "citation_score": citation_score,
         "citation_failures": citation_failures,
-        "recommendation_count": len(response.get("recommended_cars", [])),
+        "recommendation_count": len(response.get("recommended_profiles", [])),
         "evidence_count": len(response.get("evidence", [])),
         "recommendation_mode": response.get("debug", {}).get("recommendation_mode"),
         "embedding_model": response.get("debug", {}).get("embedding_model"),
-        "selected_listing_ids": selected_listing_ids,
-        "selected_listing_count": len(selected_listing_ids),
+        "selected_profile_ids": selected_profile_ids,
         "error": None,
     }
 
@@ -97,15 +94,10 @@ def capped_model_recall(hit_count: int, expected_count: int, recommendation_limi
     return ratio(hit_count, min(expected_count, recommendation_limit))
 
 
-def post_recommend(api_url: str, query: str, selected_listing_ids: list[str], timeout_seconds: float) -> dict[str, Any]:
+def post_recommend(api_url: str, query: str, selected_profile_ids: list[str], timeout_seconds: float) -> dict[str, Any]:
     url = f"{api_url.rstrip('/')}/recommend"
-    payload = json.dumps({"query": query, "selected_listing_ids": selected_listing_ids}).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    payload = json.dumps({"query": query, "selected_profile_ids": selected_profile_ids}).encode("utf-8")
+    request = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             return json.loads(response.read().decode("utf-8"))
@@ -114,211 +106,114 @@ def post_recommend(api_url: str, query: str, selected_listing_ids: list[str], ti
 
 
 def build_summary(case_results: list[dict[str, Any]], config: RecommendationEvalConfig) -> dict[str, Any]:
-    total = len(case_results)
     weak_cases = sorted(
         case_results,
         key=lambda result: (result["model_recall"] + result["risk_theme_recall"] + result["citation_score"]) / 3,
     )[:5]
-
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "api_url": config.api_url,
         "seed_dir": str(config.seed_dir),
         "limit": config.limit,
         "retrieve_limit": config.retrieve_limit,
-        "case_count": total,
+        "case_count": len(case_results),
         "average_model_recall": round(average(result["model_recall"] for result in case_results), 4),
         "average_risk_theme_recall": round(average(result["risk_theme_recall"] for result in case_results), 4),
         "average_citation_score": round(average(result["citation_score"] for result in case_results), 4),
         "cases_with_full_citations": sum(1 for result in case_results if result["citation_score"] == 1.0),
-        "average_recommendation_count": round(
-            average(result["recommendation_count"] for result in case_results),
-            2,
-        ),
         "insufficient_shortlist_cases": sum(1 for result in case_results if result.get("error") == "insufficient_shortlist"),
-        "recommendation_mode": first_non_empty(result.get("recommendation_mode") for result in case_results),
-        "embedding_model": first_non_empty(result.get("embedding_model") for result in case_results),
-        "weak_cases": [
-            {
-                "id": result["id"],
-                "model_recall": result["model_recall"],
-                "risk_theme_recall": result["risk_theme_recall"],
-                "citation_score": result["citation_score"],
-                "model_misses": [
-                    model for model in result["expected_models"] if model not in result["model_hits"]
-                ],
-                "risk_theme_misses": [
-                    theme for theme in result["expected_risk_themes"] if theme not in result["risk_theme_hits"]
-                ],
-                "citation_failures": result["citation_failures"],
-            }
-            for result in weak_cases
-        ],
+        "weak_cases": weak_cases,
         "cases": case_results,
     }
 
 
 def format_summary(summary: dict[str, Any]) -> str:
-    lines = [
-        "Recommendation eval completed",
-        f"- cases: {summary['case_count']}",
-        f"- average model recall: {summary['average_model_recall']:.2%}",
-        f"- average risk theme recall: {summary['average_risk_theme_recall']:.2%}",
-        f"- average citation score: {summary['average_citation_score']:.2%}",
-        f"- cases with full citations: {summary['cases_with_full_citations']}/{summary['case_count']}",
-        f"- average recommendations per case: {summary['average_recommendation_count']:.2f}",
-        f"- insufficient shortlists: {summary['insufficient_shortlist_cases']}",
-    ]
-    if summary["weak_cases"]:
-        lines.append("- weakest cases:")
-        for case in summary["weak_cases"]:
-            lines.append(
-                "  - "
-                f"{case['id']}: model={case['model_recall']:.2%}, "
-                f"risk={case['risk_theme_recall']:.2%}, citation={case['citation_score']:.2%}"
-            )
-    return "\n".join(lines)
+    return "\n".join(
+        [
+            "Recommendation eval completed",
+            f"- cases: {summary['case_count']}",
+            f"- average model recall: {summary['average_model_recall']:.2%}",
+            f"- average risk theme recall: {summary['average_risk_theme_recall']:.2%}",
+            f"- average citation score: {summary['average_citation_score']:.2%}",
+        ]
+    )
 
 
 def format_markdown_report(summary: dict[str, Any]) -> str:
     lines = [
         "# Recommendation Eval Report",
         "",
-        "## Run Metadata",
-        "",
         f"- Generated at: `{summary['generated_at']}`",
         f"- API URL: `{summary['api_url']}`",
         f"- Seed data: `{summary['seed_dir']}`",
-        f"- Recommend limit: `{summary['limit']}`",
-        f"- Retrieve limit: `{summary['retrieve_limit']}`",
-        f"- Recommendation mode: `{summary.get('recommendation_mode') or 'unknown'}`",
-        f"- Embedding model: `{summary.get('embedding_model') or 'unknown'}`",
-        "",
-        "## Summary",
-        "",
-        f"- Cases: {summary['case_count']}",
-        f"- Average model recall: {summary['average_model_recall']:.2%}",
-        f"- Average risk theme recall: {summary['average_risk_theme_recall']:.2%}",
-        f"- Average citation score: {summary['average_citation_score']:.2%}",
-        f"- Cases with full citations: {summary['cases_with_full_citations']}/{summary['case_count']}",
-        f"- Average recommendations per case: {summary['average_recommendation_count']:.2f}",
-        f"- Insufficient shortlists: {summary['insufficient_shortlist_cases']}",
-        "",
-        "## Weakest Cases",
         "",
     ]
-    for case in summary["weak_cases"]:
-        model_misses = ", ".join(case["model_misses"]) or "none"
-        risk_misses = ", ".join(case["risk_theme_misses"]) or "none"
-        citation_failures = "; ".join(case["citation_failures"]) or "none"
-        lines.extend(
-            [
-                f"### {case['id']}",
-                "",
-                f"- Model recall: {case['model_recall']:.2%}",
-                f"- Risk theme recall: {case['risk_theme_recall']:.2%}",
-                f"- Citation score: {case['citation_score']:.2%}",
-                f"- Missed models: {model_misses}",
-                f"- Missed risk themes: {risk_misses}",
-                f"- Citation failures: {citation_failures}",
-                "",
-            ]
-        )
-
-    lines.extend(["## Case Details", ""])
     for case in summary["cases"]:
-        failures = "; ".join(case["citation_failures"]) or "none"
         lines.extend(
             [
-                f"### {case['id']}",
+                f"## {case['id']}",
                 "",
                 f"- Query: {case['query']}",
-                f"- Expected models: {', '.join(case['expected_models']) or 'none'}",
                 f"- Recommended models: {', '.join(case['recommended_models']) or 'none'}",
-                f"- Model hits: {', '.join(case['model_hits']) or 'none'}",
-                f"- Risk theme hits: {', '.join(case['risk_theme_hits']) or 'none'}",
                 f"- Citation score: {case['citation_score']:.2%}",
-                f"- Citation failures: {failures}",
-                f"- Selected listings: {', '.join(case.get('selected_listing_ids', [])) or 'none'}",
-                f"- Recommendations / evidence: {case['recommendation_count']} / {case['evidence_count']}",
                 "",
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
 
 
-def shortlist_listing_ids(retrieval_response: dict[str, Any], limit: int) -> list[str]:
-    listing_ids = [
-        str(listing.get("listing_id")).strip()
-        for listing in retrieval_response.get("listings", [])
-        if str(listing.get("listing_id", "")).strip()
+def shortlist_profile_ids(retrieval_response: dict[str, Any], limit: int) -> list[str]:
+    profile_ids = [
+        str(profile.get("profile_id")).strip()
+        for profile in retrieval_response.get("vehicle_profiles", [])
+        if str(profile.get("profile_id", "")).strip()
     ]
-    return listing_ids[: max(2, min(limit, 4))]
+    return profile_ids[: max(2, min(limit, 4))]
 
 
 def score_citations(response: dict[str, Any]) -> tuple[float, list[str]]:
     evidence_ids = {item.get("id") for item in response.get("evidence", [])}
-    obligations = 0
-    hits = 0
     failures: list[str] = []
+    total_checks = 0
+    passed_checks = 0
 
-    for car in response.get("recommended_cars", []):
-        title = car.get("title") or car.get("listing_id") or "unknown car"
-        obligations += 1
-        car_evidence_ids = set(car.get("evidence_ids", []))
-        if car_evidence_ids and car_evidence_ids.issubset(evidence_ids):
-            hits += 1
+    for profile in response.get("recommended_profiles", []):
+        total_checks += 1
+        profile_evidence_ids = set(profile.get("evidence_ids", []))
+        if profile_evidence_ids and profile_evidence_ids.issubset(evidence_ids):
+            passed_checks += 1
         else:
-            failures.append(f"{title} has missing or invalid car evidence ids")
+            failures.append(f"{profile.get('profile_id')} has invalid evidence ids")
 
-        for flag in car.get("risk_flags", []):
-            obligations += 1
-            flag_evidence_ids = set(flag.get("evidence_ids", []))
-            if flag_evidence_ids and flag_evidence_ids.issubset(evidence_ids):
-                hits += 1
+        for flag in profile.get("risk_flags", []):
+            total_checks += 1
+            flag_ids = set(flag.get("evidence_ids", []))
+            if flag_ids and flag_ids.issubset(evidence_ids):
+                passed_checks += 1
             else:
-                failures.append(f"{title} risk '{flag.get('label', 'unknown')}' has missing or invalid evidence ids")
+                failures.append(f"{profile.get('profile_id')} risk flag has invalid evidence ids")
 
-    return ratio(hits, obligations), failures
+    return ratio(passed_checks, total_checks), failures
 
 
 def extract_recommended_models(response: dict[str, Any]) -> set[str]:
-    text = normalize_text(
-        " ".join(
-            str(value)
-            for car in response.get("recommended_cars", [])
-            for value in (car.get("title"), car.get("listing_id"))
-            if value
-        )
-    )
-    padded_text = f" {text} "
-    models = set()
-    for alias, model in MODEL_ALIASES.items():
-        if f" {alias} " in padded_text:
-            models.add(model)
+    models: set[str] = set()
+    for profile in response.get("recommended_profiles", []):
+        title = normalize_text(str(profile.get("title", "")))
+        for alias, canonical in MODEL_ALIASES.items():
+            if alias in title:
+                models.add(canonical)
     return models
 
 
 def collect_recommendation_text(response: dict[str, Any]) -> str:
     parts: list[str] = []
-    for car in response.get("recommended_cars", []):
-        parts.extend(str(value) for value in car.get("why_it_matches", []) if value)
-        parts.append(str(car.get("price_commentary", "")))
-        parts.extend(str(value) for value in car.get("next_steps", []) if value)
-        for flag in car.get("risk_flags", []):
-            parts.extend(str(value) for value in (flag.get("label"), flag.get("reason")) if value)
-    for evidence in response.get("evidence", []):
-        parts.extend(str(value) for value in (evidence.get("title"), evidence.get("snippet")) if value)
-    return normalize_text(" ".join(parts))
-
-
-def canonical_model_name(value: str) -> str:
-    normalized = normalize_text(value)
-    return MODEL_ALIASES.get(normalized, value)
-
-
-def first_non_empty(values: Any) -> Any:
-    for value in values:
-        if value:
-            return value
-    return None
+    for profile in response.get("recommended_profiles", []):
+        parts.extend(
+            [*profile.get("why_it_matches", []), *profile.get("trade_offs", []), profile.get("valuation_summary", "")]
+        )
+        for flag in profile.get("risk_flags", []):
+            parts.append(flag.get("reason", ""))
+    for item in response.get("evidence", []):
+        parts.append(item.get("snippet", ""))
+    return normalize_text(" ".join(str(part) for part in parts))

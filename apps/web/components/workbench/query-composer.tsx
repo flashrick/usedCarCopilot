@@ -9,18 +9,19 @@ type QueryComposerProps = {
   budget: string;
   brand: string;
   bodyType: string;
-  location: string;
+  fuelType: string;
   onQueryChange: (value: string) => void;
   onBudgetChange: (value: string) => void;
   onBrandChange: (value: string) => void;
   onBodyTypeChange: (value: string) => void;
-  onLocationChange: (value: string) => void;
+  onFuelTypeChange: (value: string) => void;
   onSubmit: () => void;
   loading?: boolean;
 };
 
 const brands = ["", "Toyota", "Honda", "Mazda"];
 const bodyTypes = ["", "hatchback", "sedan", "suv"];
+const fuelTypes = ["", "petrol", "hybrid"];
 
 export function QueryComposer(props: QueryComposerProps) {
   const { copy, locale } = useLocale();
@@ -29,12 +30,12 @@ export function QueryComposer(props: QueryComposerProps) {
     budget,
     brand,
     bodyType,
-    location,
+    fuelType,
     onQueryChange,
     onBudgetChange,
     onBrandChange,
     onBodyTypeChange,
-    onLocationChange,
+    onFuelTypeChange,
     onSubmit,
     loading,
   } = props;
@@ -84,7 +85,15 @@ export function QueryComposer(props: QueryComposerProps) {
                 option ? translateValue(option, locale) : formatTemplate(copy.queryComposer.allLabel, { label: copy.queryComposer.body })
               }
             />
-            <Field label={copy.queryComposer.location} value={location} onChange={onLocationChange} placeholder="Auckland" />
+            <SelectField
+              label={copy.queryComposer.fuel}
+              value={fuelType}
+              onChange={onFuelTypeChange}
+              options={fuelTypes}
+              localeLabel={(option) =>
+                option ? translateValue(option, locale) : formatTemplate(copy.queryComposer.allLabel, { label: copy.queryComposer.fuel })
+              }
+            />
 
             <button
               type="button"

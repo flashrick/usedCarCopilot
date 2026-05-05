@@ -5,7 +5,7 @@ from typing import Any
 
 from app.core.config import Settings, get_settings
 from app.db.connection import get_session
-from app.evaluation.recommendation_eval import score_citations, shortlist_listing_ids
+from app.evaluation.recommendation_eval import score_citations, shortlist_profile_ids
 from app.models.schemas import RecommendRequest, RetrieveRequest
 from app.recommendation.service import build_selected_retrieval_response, get_recommendation_generator
 from app.retrieval.service import retrieve
@@ -28,13 +28,13 @@ def run_provider_validation(
 ) -> dict[str, Any]:
     resolved_settings = settings or get_settings()
     retrieval_response = retrieve(RetrieveRequest(query=config.query, limit=20))
-    selected_listing_ids = shortlist_listing_ids(retrieval_response, config.limit)
-    if len(selected_listing_ids) < 2:
+    selected_profile_ids = shortlist_profile_ids(retrieval_response, config.limit)
+    if len(selected_profile_ids) < 2:
         results = [
             {
                 "provider": provider,
                 "status": "failed",
-                "error": "retrieval returned fewer than 2 selectable listings",
+                "error": "retrieval returned fewer than 2 selectable profiles",
             }
             for provider in config.providers
         ]
@@ -47,7 +47,7 @@ def run_provider_validation(
             "skipped": 0,
         }
 
-    request = RecommendRequest(query=config.query, selected_listing_ids=selected_listing_ids)
+    request = RecommendRequest(query=config.query, selected_profile_ids=selected_profile_ids)
     with get_session() as session:
         selected_retrieval_response = build_selected_retrieval_response(session, request)
     results = [
@@ -56,7 +56,7 @@ def run_provider_validation(
     ]
     return {
         "query": config.query,
-        "limit": len(selected_listing_ids),
+        "limit": len(selected_profile_ids),
         "providers": results,
         "passed": sum(1 for result in results if result["status"] == "passed"),
         "failed": sum(1 for result in results if result["status"] == "failed"),
@@ -122,7 +122,7 @@ def validate_provider(
         "status": status,
         "generation_source": generation_source,
         "citation_score": citation_score,
-        "recommendation_count": len(generated.get("recommended_cars", [])),
+        "recommendation_count": len(generated.get("recommended_profiles", [])),
         "evidence_count": len(generated.get("evidence", [])),
     }
     if fallback_reason:

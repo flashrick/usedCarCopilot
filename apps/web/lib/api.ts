@@ -49,8 +49,8 @@ export async function fetchRetrieve(payload: RetrieveRequest): Promise<RetrieveR
   });
 }
 
-export async function fetchListings(limit = 24) {
-  return apiRequest(`/listings?limit=${limit}`);
+export async function fetchVehicleProfiles(limit = 24) {
+  return apiRequest(`/vehicle-profiles?limit=${limit}`);
 }
 
 export async function fetchAdminSettings(): Promise<AdminSettingsResponse> {

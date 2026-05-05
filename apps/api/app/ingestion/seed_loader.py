@@ -12,8 +12,9 @@ from app.db.orm import (
     EvalCaseRecord,
     IngestionRunRecord,
     KnowledgeSourceRecord,
-    ListingRecord,
+    VehicleProfileRecord,
 )
+from app.valuation.service import compute_profile_valuation
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -46,7 +47,7 @@ def chunk_text(text: str, max_words: int = 180) -> list[str]:
 
 
 def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
-    listings = read_jsonl(seed_dir / "listings.jsonl")
+    vehicle_profiles = read_jsonl(seed_dir / "vehicle_profiles.jsonl")
     knowledge_sources = read_jsonl(seed_dir / "knowledge_sources.jsonl")
     eval_cases = read_json(seed_dir / "eval_cases.json")
 
@@ -59,25 +60,50 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
         session.flush()
 
         try:
-            for row in listings:
+            for row in vehicle_profiles:
+                valuation = compute_profile_valuation(row)
                 session.merge(
-                    ListingRecord(
-                        listing_id=row["listing_id"],
+                    VehicleProfileRecord(
+                        profile_id=row["profile_id"],
                         title=row["title"],
                         brand=row["brand"],
                         model=row["model"],
-                        year=row.get("year"),
-                        price=row.get("price"),
-                        mileage=row.get("mileage"),
+                        generation_label=row.get("generation_label"),
+                        facelift_label=row.get("facelift_label"),
+                        year_start=row["year_start"],
+                        year_end=row["year_end"],
+                        trim=row["trim"],
+                        engine_code=row.get("engine_code"),
+                        engine_description=row["engine_description"],
+                        displacement_l=row.get("displacement_l"),
                         transmission=row.get("transmission"),
+                        drivetrain=row.get("drivetrain"),
                         fuel_type=row.get("fuel_type"),
-                        seller_type=row.get("seller_type"),
-                        location=row.get("location"),
                         body_type=row.get("body_type"),
-                        source=row["source"],
-                        source_url=row.get("source_url"),
-                        description=row.get("description"),
-                        raw_payload=row,
+                        seat_count=row.get("seat_count"),
+                        fuel_consumption_l_per_100km=row.get("fuel_consumption_l_per_100km"),
+                        power_kw=row.get("power_kw"),
+                        power_hp=row.get("power_hp"),
+                        nvh_summary=row.get("nvh_summary"),
+                        ride_handling_summary=row.get("ride_handling_summary"),
+                        comfort_summary=row.get("comfort_summary"),
+                        space_summary=row.get("space_summary"),
+                        reliability_summary=row.get("reliability_summary"),
+                        common_issues=row.get("common_issues", []),
+                        maintenance_cost_band=row.get("maintenance_cost_band"),
+                        suitability_summary=row.get("suitability_summary"),
+                        base_msrp_nzd=row.get("base_msrp_nzd"),
+                        estimated_price_min_nzd=valuation["estimated_price_min_nzd"],
+                        estimated_price_mid_nzd=valuation["estimated_price_mid_nzd"],
+                        estimated_price_max_nzd=valuation["estimated_price_max_nzd"],
+                        valuation_confidence=valuation["valuation_confidence"],
+                        valuation_market=valuation["valuation_market"],
+                        valuation_as_of_date=valuation["valuation_as_of_date"],
+                        assumed_condition=valuation["assumed_condition"],
+                        assumed_mileage_km=valuation["assumed_mileage_km"],
+                        valuation_method=valuation["valuation_method"],
+                        valuation_notes=valuation["valuation_notes"],
+                        raw_payload={**row, **valuation},
                         updated_at=func.now(),
                     )
                 )
@@ -93,6 +119,10 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
                         model=row["model"],
                         year_range=row.get("year_range"),
                         market=row.get("market"),
+                        profile_id=row.get("profile_id"),
+                        generation_label=row.get("generation_label"),
+                        trim=row.get("trim"),
+                        powertrain_tags=row.get("powertrain_tags", []),
                         tags=row.get("tags", []),
                         summary=row.get("summary"),
                         text=row["text"],
@@ -112,7 +142,15 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
                             chunk_index=index,
                             text=chunk,
                             token_count=len(chunk.split()),
-                            metadata_={"brand": row["brand"], "model": row["model"], "tags": row["tags"]},
+                            metadata_={
+                                "brand": row["brand"],
+                                "model": row["model"],
+                                "profile_id": row.get("profile_id"),
+                                "generation_label": row.get("generation_label"),
+                                "trim": row.get("trim"),
+                                "powertrain_tags": row.get("powertrain_tags", []),
+                                "tags": row.get("tags", []),
+                            },
                         )
                     )
 
@@ -131,7 +169,8 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
 
             run.status = "completed"
             run.completed_at = session.scalar(select(func.now()))
-            run.listings_count = len(listings)
+            run.listings_count = 0
+            run.profile_count = len(vehicle_profiles)
             run.knowledge_count = len(knowledge_sources)
             run.eval_count = len(eval_cases)
             run.message = "seed ingestion completed"
@@ -142,7 +181,7 @@ def ingest_seed_data(seed_dir: Path) -> dict[str, int]:
             raise
 
     return {
-        "listings": len(listings),
+        "vehicle_profiles": len(vehicle_profiles),
         "knowledge_sources": len(knowledge_sources),
         "eval_cases": len(eval_cases),
     }

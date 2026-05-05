@@ -1,29 +1,29 @@
 # AI Used Car Decision Copilot
 
-AI Used Car Decision Copilot is a portfolio-grade AI engineering project for used car decision support. It combines structured vehicle listings with unstructured reviews, buying guides, and maintenance knowledge to produce grounded recommendations, risk flags, and comparison reports.
+AI Used Car Decision Copilot is a portfolio-grade AI engineering project for used car decision support. It combines structured vehicle profile data with unstructured reviews, buying guides, and maintenance knowledge to recommend the right year-range, trim, and powertrain profile with grounded trade-offs, valuation ranges, and citations.
 
 This repository is in the early backend implementation stage. The first implementation target is a focused MVP that demonstrates RAG, hybrid retrieval, pgvector, citation-based generation, evaluation, and production-minded API/UI packaging.
 
 ## Problem
 
-Buying a used car is a high-risk decision. Listings are incomplete, seller descriptions can be biased, and useful information is scattered across reviews, maintenance notes, and buying guides.
+Buying a used car is a high-risk decision. Real user pain starts before shopping a specific car: they need to decide which generation, trim, engine, and gearbox profile is worth targeting. Useful information is still scattered across reviews, maintenance notes, and buying guides.
 
 The goal is not to build a generic chatbot. The goal is to build a decision support system that helps a buyer understand:
 
-- Which listings best match their budget and usage
-- What trade-offs exist between similar cars
-- Which risks are visible from mileage, age, description, and known model issues
-- Why the system recommends a car, with evidence attached
+- Which year-range and variant profile best match their budget and usage
+- What trade-offs exist between similar trims and powertrains
+- Which reliability, running-cost, and comfort risks matter before shopping the market
+- Why the system recommends a profile, with evidence attached
 
 ## MVP Scope
 
 The MVP should support one narrow data scope first:
 
-- 1 market or city
+- 1 market
 - 3 brands, initially Toyota, Mazda, and Honda
-- A small but high-quality listing and knowledge dataset
+- A small but high-quality vehicle-profile and knowledge dataset
 - Natural language search plus structured filtering
-- Top 3 recommendations with citations and risk flags
+- Top profile recommendations with citations, valuation ranges, and risk flags
 
 ## Planned Stack
 
@@ -37,12 +37,13 @@ The MVP should support one narrow data scope first:
 ## Key Capabilities
 
 - Parse user buying needs into structured constraints
-- Filter listings by price, year, mileage, brand, and usage fit
+- Filter vehicle profiles by estimated market value, body type, fuel type, transmission, brand, and usage fit
 - Retrieve supporting knowledge from reviews, model notes, maintenance guidance, and buying guides
-- Rank listings using structured signals plus semantic evidence
+- Rank variant profiles using structured signals plus semantic evidence
 - Generate recommendation output in a stable JSON shape
 - Attach citations to claims
-- Score risk factors such as high mileage, maintenance cost, accident cues, and weak usage fit
+- Estimate an NZ valuation range for each candidate profile with explicit assumptions
+- Score risk factors such as maintenance sensitivity, hybrid-system checks, running-cost trade-offs, and weak usage fit
 - Log requests, retrieval results, cost, and failures for debugging
 
 ## Documentation
@@ -60,7 +61,7 @@ The MVP should support one narrow data scope first:
 
 ## Current Status
 
-The repository now contains planning documents, seed data, and a PostgreSQL-backed FastAPI scaffold with seed ingestion, local chunk embedding generation, pgvector semantic retrieval for shortlist building, and a second-stage citation-aware recommendation flow that ranks user-selected listings through `/recommend`.
+The repository now contains planning documents, seed data, and a PostgreSQL-backed FastAPI scaffold with seed ingestion, deterministic vehicle-profile valuation, local chunk embedding generation, pgvector semantic retrieval for shortlist building, and a second-stage citation-aware recommendation flow that ranks user-selected vehicle profiles through `/recommend`.
 
 ## Backend Quickstart
 
@@ -153,7 +154,7 @@ Optional local provider settings:
 EMBEDDING_PROVIDER=local_hash
 EMBEDDING_MODEL=local-hash-embedding-v1
 RECOMMENDATION_PROVIDER=deterministic
-RECOMMENDATION_MODEL=deterministic_ranker_with_citations
+RECOMMENDATION_MODEL=deterministic_variant_recommender_v1
 ```
 
 Optional OpenAI-backed second-stage recommendation generation:
@@ -210,10 +211,10 @@ cd apps/api
 First endpoints:
 
 - `GET /health`
-- `GET /listings`
+- `GET /vehicle-profiles`
 - `GET /knowledge`
-- `POST /retrieve`, returning shortlist candidates, model-linked knowledge, semantic chunks, and retrieval debug metadata
-- `POST /recommend`, taking `query` plus `selected_listing_ids` and returning ranked advice, match scores, risk flags, price commentary, next steps, and cited evidence for that selected shortlist
+- `POST /retrieve`, returning shortlist vehicle profiles, model-linked knowledge, semantic chunks, and retrieval debug metadata
+- `POST /recommend`, taking `query` plus `selected_profile_ids` and returning ranked profile advice, trade-offs, valuation summaries, next steps, and cited evidence for that selected shortlist
 
 ## Frontend Quickstart
 

@@ -64,7 +64,7 @@ Optional local provider settings:
 EMBEDDING_PROVIDER=local_hash
 EMBEDDING_MODEL=local-hash-embedding-v1
 RECOMMENDATION_PROVIDER=deterministic
-RECOMMENDATION_MODEL=deterministic_ranker_with_citations
+RECOMMENDATION_MODEL=deterministic_variant_recommender_v1
 ```
 
 Optional OpenAI-backed second-stage recommendation generation:
@@ -129,13 +129,13 @@ cd apps/api
 ## Endpoints
 
 - `GET /health`
-- `GET /listings`
+- `GET /vehicle-profiles`
 - `GET /knowledge`
 - `POST /retrieve`
 - `POST /recommend`
 
-`POST /retrieve` uses structured listing filters plus pgvector semantic retrieval over embedded knowledge chunks. The current embedding provider is `local_hash` with model `local-hash-embedding-v1`, a deterministic local provider intended for repeatable development before an external embedding provider is chosen.
+`POST /retrieve` uses structured vehicle-profile filters plus pgvector semantic retrieval over embedded knowledge chunks. The current embedding provider is `local_hash` with model `local-hash-embedding-v1`, a deterministic local provider intended for repeatable development before an external embedding provider is chosen.
 
 The retrieval eval runner calls `POST /retrieve` for the 20 seed eval cases, then reports model recall, risk-theme recall, filter recall, semantic chunk coverage, and weakest cases.
 
-`POST /recommend` is the second stage of the flow. It accepts the original natural-language query plus `selected_listing_ids`, rebuilds evidence around those selected listings only, ranks them with deterministic structured signals, and returns match scores, reasons, risk flags, price commentary, next steps, and evidence ids. The current local recommendation provider is `deterministic`; `openai`, `deepseek`, `qwen`, and `kimi` can be enabled for AI generation behind the same response contract. The recommendation eval runner now calls `POST /retrieve` first, selects the top shortlist items, then validates `POST /recommend` on that selected subset.
+`POST /recommend` is the second stage of the flow. It accepts the original natural-language query plus `selected_profile_ids`, rebuilds evidence around those selected vehicle profiles only, ranks them with deterministic structured signals, and returns match scores, reasons, trade-offs, risk flags, valuation summaries, next steps, and evidence ids. The current local recommendation provider is `deterministic`; `openai`, `deepseek`, `qwen`, and `kimi` can be enabled for AI generation behind the same response contract. The recommendation eval runner now calls `POST /retrieve` first, selects the top shortlist profiles, then validates `POST /recommend` on that selected subset.

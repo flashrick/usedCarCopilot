@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale } from "@/components/i18n/locale-provider";
-import { formatMileage, formatMoney, truncate } from "@/lib/format";
+import { formatConsumption, formatMoneyRange, truncate } from "@/lib/format";
 import { compactLabel, translateValue } from "@/lib/i18n";
 import type { RetrieveResponse } from "@/lib/types";
 
@@ -20,19 +20,20 @@ export function RetrieveResults({ data }: { data: RetrieveResponse | null }) {
       <section className="rounded-md border border-line/70 bg-panel p-4 shadow-panel">
         <h3 className="text-lg font-semibold">{copy.retrieveResults.listings}</h3>
         <div className="mt-4 space-y-3">
-          {data.listings.map((listing) => (
-            <article key={listing.listing_id} className="rounded-md bg-shell p-3">
+          {data.vehicle_profiles.map((profile) => (
+            <article key={profile.profile_id} className="rounded-md bg-shell p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="font-medium">{listing.title}</div>
+                  <div className="font-medium">{profile.title}</div>
                   <div className="mt-1 text-xs text-muted">
-                    {formatMoney(listing.price, locale)} · {formatMileage(listing.mileage, locale)} · {translateValue(listing.fuel_type, locale)} ·{" "}
-                    {translateValue(listing.body_type, locale)}
+                    {formatMoneyRange(profile.estimated_price_min_nzd, profile.estimated_price_max_nzd, locale)} ·{" "}
+                    {formatConsumption(profile.fuel_consumption_l_per_100km)} · {translateValue(profile.fuel_type, locale)} ·{" "}
+                    {translateValue(profile.body_type, locale)}
                   </div>
                 </div>
-                <span className="rounded-md bg-white px-2 py-1 text-xs text-muted">{listing.location}</span>
+                <span className="rounded-md bg-white px-2 py-1 text-xs text-muted">{profile.transmission.toUpperCase()}</span>
               </div>
-              {listing.description ? <p className="mt-3 text-sm text-muted">{truncate(listing.description, 180)}</p> : null}
+              {profile.suitability_summary ? <p className="mt-3 text-sm text-muted">{truncate(profile.suitability_summary, 180)}</p> : null}
             </article>
           ))}
         </div>

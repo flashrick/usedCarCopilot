@@ -14,7 +14,7 @@ export default function FindQueryPage() {
   const [query, setQuery] = useState(defaultQuery);
   const [recommendation, setRecommendation] = useState<RecommendResponse | null>(null);
   const [retrieval, setRetrieval] = useState<RetrieveResponse | null>(null);
-  const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isAdvising, setIsAdvising] = useState(false);
@@ -54,7 +54,7 @@ export default function FindQueryPage() {
 
       setRetrieval(retrieveData);
       setRecommendation(null);
-      setSelectedListingIds([]);
+      setSelectedProfileIds([]);
 
       document.getElementById("shortlist")?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (caughtError) {
@@ -64,18 +64,18 @@ export default function FindQueryPage() {
     }
   }
 
-  function toggleSelection(listingId: string) {
+  function toggleSelection(profileId: string) {
     setError(null);
     setRecommendation(null);
-    setSelectedListingIds((current) => {
-      if (current.includes(listingId)) {
-        return current.filter((value) => value !== listingId);
+    setSelectedProfileIds((current) => {
+      if (current.includes(profileId)) {
+        return current.filter((value) => value !== profileId);
       }
       if (current.length >= 4) {
         setError(copy.findQuery.selectionLimitError);
         return current;
       }
-      return [...current, listingId];
+      return [...current, profileId];
     });
   }
 
@@ -85,7 +85,7 @@ export default function FindQueryPage() {
       setError(copy.findQuery.emptyQueryError);
       return;
     }
-    if (selectedListingIds.length < 2) {
+    if (selectedProfileIds.length < 2) {
       setError(copy.findQuery.selectionMinimumError);
       return;
     }
@@ -95,7 +95,7 @@ export default function FindQueryPage() {
     try {
       const recommendData = await fetchRecommend({
         query: trimmedQuery,
-        selected_listing_ids: selectedListingIds,
+        selected_profile_ids: selectedProfileIds,
       });
       setRecommendation(recommendData);
       document.getElementById("advice")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -170,7 +170,7 @@ export default function FindQueryPage() {
           <SearchResults
             recommendation={recommendation}
             retrieval={retrieval}
-            selectedListingIds={selectedListingIds}
+            selectedProfileIds={selectedProfileIds}
             onToggleSelection={toggleSelection}
             onRequestAdvice={() => void requestAdvice()}
             recommendationLoading={isAdvising}

@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ARRAY, BigInteger, DateTime, ForeignKey, Integer, Text, func
+from datetime import date
+
+from sqlalchemy import ARRAY, BigInteger, Date, DateTime, Float, ForeignKey, Integer, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import UserDefinedType
@@ -56,29 +58,54 @@ class IngestionRunRecord(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(Text)
     listings_count: Mapped[int] = mapped_column(Integer, default=0)
+    profile_count: Mapped[int] = mapped_column(Integer, default=0)
     knowledge_count: Mapped[int] = mapped_column(Integer, default=0)
     eval_count: Mapped[int] = mapped_column(Integer, default=0)
     message: Mapped[str | None] = mapped_column(Text)
 
 
-class ListingRecord(Base):
-    __tablename__ = "listings"
+class VehicleProfileRecord(Base):
+    __tablename__ = "vehicle_profiles"
 
-    listing_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    profile_id: Mapped[str] = mapped_column(Text, primary_key=True)
     title: Mapped[str] = mapped_column(Text)
     brand: Mapped[str] = mapped_column(Text)
     model: Mapped[str] = mapped_column(Text)
-    year: Mapped[int | None] = mapped_column(Integer)
-    price: Mapped[int | None] = mapped_column(Integer)
-    mileage: Mapped[int | None] = mapped_column(Integer)
-    transmission: Mapped[str | None] = mapped_column(Text)
-    fuel_type: Mapped[str | None] = mapped_column(Text)
-    seller_type: Mapped[str | None] = mapped_column(Text)
-    location: Mapped[str | None] = mapped_column(Text)
-    body_type: Mapped[str | None] = mapped_column(Text)
-    source: Mapped[str] = mapped_column(Text)
-    source_url: Mapped[str | None] = mapped_column(Text)
-    description: Mapped[str | None] = mapped_column(Text)
+    generation_label: Mapped[str | None] = mapped_column(Text)
+    facelift_label: Mapped[str | None] = mapped_column(Text)
+    year_start: Mapped[int] = mapped_column(Integer)
+    year_end: Mapped[int] = mapped_column(Integer)
+    trim: Mapped[str] = mapped_column(Text)
+    engine_code: Mapped[str | None] = mapped_column(Text)
+    engine_description: Mapped[str] = mapped_column(Text)
+    displacement_l: Mapped[float | None] = mapped_column(Float)
+    transmission: Mapped[str] = mapped_column(Text)
+    drivetrain: Mapped[str | None] = mapped_column(Text)
+    fuel_type: Mapped[str] = mapped_column(Text)
+    body_type: Mapped[str] = mapped_column(Text)
+    seat_count: Mapped[int | None] = mapped_column(Integer)
+    fuel_consumption_l_per_100km: Mapped[float | None] = mapped_column(Float)
+    power_kw: Mapped[int | None] = mapped_column(Integer)
+    power_hp: Mapped[int | None] = mapped_column(Integer)
+    nvh_summary: Mapped[str | None] = mapped_column(Text)
+    ride_handling_summary: Mapped[str | None] = mapped_column(Text)
+    comfort_summary: Mapped[str | None] = mapped_column(Text)
+    space_summary: Mapped[str | None] = mapped_column(Text)
+    reliability_summary: Mapped[str | None] = mapped_column(Text)
+    common_issues: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    maintenance_cost_band: Mapped[str | None] = mapped_column(Text)
+    suitability_summary: Mapped[str | None] = mapped_column(Text)
+    base_msrp_nzd: Mapped[int | None] = mapped_column(Integer)
+    estimated_price_min_nzd: Mapped[int | None] = mapped_column(Integer)
+    estimated_price_mid_nzd: Mapped[int | None] = mapped_column(Integer)
+    estimated_price_max_nzd: Mapped[int | None] = mapped_column(Integer)
+    valuation_confidence: Mapped[str | None] = mapped_column(Text)
+    valuation_market: Mapped[str | None] = mapped_column(Text)
+    valuation_as_of_date: Mapped[date | None] = mapped_column(Date)
+    assumed_condition: Mapped[str | None] = mapped_column(Text)
+    assumed_mileage_km: Mapped[int | None] = mapped_column(Integer)
+    valuation_method: Mapped[str | None] = mapped_column(Text)
+    valuation_notes: Mapped[str | None] = mapped_column(Text)
     raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -95,6 +122,10 @@ class KnowledgeSourceRecord(Base):
     model: Mapped[str] = mapped_column(Text)
     year_range: Mapped[str | None] = mapped_column(Text)
     market: Mapped[str | None] = mapped_column(Text)
+    profile_id: Mapped[str | None] = mapped_column(Text)
+    generation_label: Mapped[str | None] = mapped_column(Text)
+    trim: Mapped[str | None] = mapped_column(Text)
+    powertrain_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     summary: Mapped[str | None] = mapped_column(Text)
     text: Mapped[str] = mapped_column(Text)
@@ -166,6 +197,7 @@ class RequestLogRecord(Base):
     query: Mapped[str | None] = mapped_column(Text)
     filters: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     listing_count: Mapped[int] = mapped_column(Integer, default=0)
+    profile_count: Mapped[int] = mapped_column(Integer, default=0)
     knowledge_count: Mapped[int] = mapped_column(Integer, default=0)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(Text)

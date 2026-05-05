@@ -5,19 +5,18 @@ import {
   BadgeCheck,
   CarFront,
   CircleDollarSign,
-  MapPin,
   ShieldCheck,
   Zap,
 } from "lucide-react";
 import { useLocale } from "@/components/i18n/locale-provider";
-import { formatMileage, formatMoney } from "@/lib/format";
+import { formatConsumption, formatMoneyRange } from "@/lib/format";
 import { compactLabel, formatTemplate, translateValue } from "@/lib/i18n";
-import type { Listing, RecommendResponse, RetrieveResponse, Severity } from "@/lib/types";
+import type { RecommendResponse, RetrieveResponse, Severity, VehicleProfile } from "@/lib/types";
 
 type SearchResultsProps = {
   recommendation: RecommendResponse | null;
   retrieval: RetrieveResponse | null;
-  selectedListingIds: string[];
+  selectedProfileIds: string[];
   onToggleSelection: (id: string) => void;
   onRequestAdvice: () => void;
   recommendationLoading?: boolean;
@@ -32,13 +31,13 @@ const severityStyles: Record<Severity, string> = {
 export function SearchResults({
   recommendation,
   retrieval,
-  selectedListingIds,
+  selectedProfileIds,
   onToggleSelection,
   onRequestAdvice,
   recommendationLoading,
 }: SearchResultsProps) {
   const { copy, locale } = useLocale();
-  const selectedSet = new Set(selectedListingIds);
+  const selectedSet = new Set(selectedProfileIds);
 
   return (
     <>
@@ -46,23 +45,23 @@ export function SearchResults({
         <div className="grid content-start gap-4">
           <SectionTitle eyebrow={copy.searchResults.shortlist} title={copy.searchResults.bestMatches} />
           <SelectionToolbar
-            count={selectedListingIds.length}
+            count={selectedProfileIds.length}
             countLabel={copy.searchResults.selectedCount}
             helper={copy.searchResults.selectionHint}
             buttonLabel={copy.searchResults.getAdvice}
             buttonLoadingLabel={copy.searchResults.adviceLoading}
-            disabled={selectedListingIds.length < 2 || Boolean(recommendationLoading)}
+            disabled={selectedProfileIds.length < 2 || Boolean(recommendationLoading)}
             loading={recommendationLoading}
             onRequestAdvice={onRequestAdvice}
           />
-          {retrieval?.listings.length ? (
-            retrieval.listings.map((listing, index) => (
+          {retrieval?.vehicle_profiles.length ? (
+            retrieval.vehicle_profiles.map((listing, index) => (
               <ShortlistCard
-                key={listing.listing_id}
+                key={listing.profile_id}
                 listing={listing}
                 rank={index + 1}
-                selected={selectedSet.has(listing.listing_id)}
-                onToggle={() => onToggleSelection(listing.listing_id)}
+                selected={selectedSet.has(listing.profile_id)}
+                onToggle={() => onToggleSelection(listing.profile_id)}
                 locale={locale}
                 selectLabel={copy.searchResults.selectLabel}
                 selectedLabel={copy.searchResults.selectedBadge}
@@ -79,9 +78,9 @@ export function SearchResults({
 
         <aside id="advice" className="grid content-start gap-4">
           <SectionTitle eyebrow={copy.searchResults.aiAdvice} title={copy.searchResults.aiAdviceTitle} />
-          {recommendation?.recommended_cars.length ? (
-            recommendation.recommended_cars.map((car, index) => (
-              <article key={car.listing_id} className="rounded-lg border border-white/10 bg-[#1a1c1f] p-4">
+          {recommendation?.recommended_profiles.length ? (
+            recommendation.recommended_profiles.map((car, index) => (
+              <article key={car.profile_id} className="rounded-lg border border-white/10 bg-[#1a1c1f] p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -93,7 +92,7 @@ export function SearchResults({
                       ) : null}
                     </div>
                     <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-white">{car.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-[#c1c6d7]">{car.price_commentary}</p>
+                    <p className="mt-2 text-sm leading-6 text-[#c1c6d7]">{car.valuation_summary}</p>
                   </div>
                   <ScoreGauge score={car.match_score} />
                 </div>
@@ -112,21 +111,33 @@ export function SearchResults({
                   </div>
 
                   <div>
-                    <h4 className="font-semibold text-white">{copy.searchResults.riskFlags}</h4>
-                    <div className="mt-3 grid gap-2">
-                      {car.risk_flags.length ? (
-                        car.risk_flags.map((flag) => (
-                          <div key={`${flag.label}-${flag.reason}`} className={`rounded border p-3 text-sm ${severityStyles[flag.severity]}`}>
-                            <div className="font-semibold">{flag.label}</div>
-                            <div className="mt-1 leading-6">{flag.reason}</div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="rounded border border-[#abd600]/40 bg-[#abd600]/10 p-3 text-sm text-[#d7ff4f]">
-                          {copy.searchResults.noMajorRisk}
+                    <h4 className="font-semibold text-white">{copy.recommendationCard.tradeOffs}</h4>
+                    <div className="mt-3 grid gap-2 text-sm leading-6 text-[#c1c6d7]">
+                      {car.trade_offs.map((tradeOff) => (
+                        <div key={tradeOff} className="flex items-start gap-2">
+                          <BadgeCheck className="mt-1 h-4 w-4 shrink-0 text-[#00e5ff]" />
+                          <span>{tradeOff}</span>
                         </div>
-                      )}
+                      ))}
                     </div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <h4 className="font-semibold text-white">{copy.searchResults.riskFlags}</h4>
+                  <div className="mt-3 grid gap-2">
+                    {car.risk_flags.length ? (
+                      car.risk_flags.map((flag) => (
+                        <div key={`${flag.label}-${flag.reason}`} className={`rounded border p-3 text-sm ${severityStyles[flag.severity]}`}>
+                          <div className="font-semibold">{flag.label}</div>
+                          <div className="mt-1 leading-6">{flag.reason}</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded border border-[#abd600]/40 bg-[#abd600]/10 p-3 text-sm text-[#d7ff4f]">
+                        {copy.searchResults.noMajorRisk}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -238,7 +249,7 @@ function ShortlistCard({
   yearLabel,
   tbcLabel,
 }: {
-  listing: Listing;
+  listing: VehicleProfile;
   rank: number;
   selected: boolean;
   onToggle: () => void;
@@ -272,17 +283,13 @@ function ShortlistCard({
           </div>
           <h3 className="mt-3 font-[var(--font-space-grotesk)] text-xl font-semibold text-white">{listing.title}</h3>
           <div className="mt-2 flex flex-wrap gap-3 text-sm text-[#c1c6d7]">
-            {listing.price ? (
+            {listing.estimated_price_min_nzd ? (
               <span className="inline-flex items-center gap-1">
-                <CircleDollarSign className="h-4 w-4 text-[#abd600]" /> {formatMoney(listing.price, locale)}
+                <CircleDollarSign className="h-4 w-4 text-[#abd600]" /> {formatMoneyRange(listing.estimated_price_min_nzd, listing.estimated_price_max_nzd, locale)}
               </span>
             ) : null}
-            {listing.location ? (
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="h-4 w-4 text-[#00e5ff]" /> {listing.location}
-              </span>
-            ) : null}
-            {listing.mileage ? <span>{formatMileage(listing.mileage, locale)}</span> : null}
+            {listing.fuel_consumption_l_per_100km ? <span>{formatConsumption(listing.fuel_consumption_l_per_100km)}</span> : null}
+            <span>{listing.engine_description}</span>
           </div>
         </div>
       </div>
@@ -290,7 +297,7 @@ function ShortlistCard({
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <MetaTile icon={CarFront} label={bodyLabel} value={translateValue(listing.body_type, locale)} />
         <MetaTile icon={Zap} label={fuelLabel} value={translateValue(listing.fuel_type, locale)} />
-        <MetaTile icon={ShieldCheck} label={yearLabel} value={listing.year?.toString() ?? tbcLabel} />
+        <MetaTile icon={ShieldCheck} label={yearLabel} value={`${listing.year_start}-${listing.year_end}`} />
       </div>
     </button>
   );

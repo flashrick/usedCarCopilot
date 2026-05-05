@@ -22,7 +22,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run two-stage recommendation eval cases against POST /retrieve and POST /recommend.")
     parser.add_argument("--api-url", default=f"http://127.0.0.1:{settings.api_port}", help="Base URL for the API.")
     parser.add_argument("--seed-dir", type=Path, default=settings.seed_data_dir, help="Directory containing eval_cases.json.")
-    parser.add_argument("--limit", type=int, default=3, help="Number of shortlisted listings sent to /recommend.")
+    parser.add_argument("--limit", type=int, default=3, help="Number of shortlisted vehicle profiles sent to /recommend.")
     parser.add_argument("--retrieve-limit", type=int, default=20, help="Retrieve limit sent to /retrieve before shortlist selection.")
     parser.add_argument("--timeout", type=float, default=10.0, help="HTTP timeout in seconds.")
     parser.add_argument("--json-output", type=Path, default=None, help="Optional path for full JSON results.")

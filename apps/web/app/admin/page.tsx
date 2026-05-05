@@ -13,16 +13,16 @@ import { fetchRecommend, fetchRetrieve } from "@/lib/api";
 import { parseIntegerInput } from "@/lib/form";
 import type { RecommendResponse, RetrieveResponse } from "@/lib/types";
 
-const defaultQuery = "I need a reliable car under $12,000 for commuting in Auckland.";
+const defaultQuery = "I need a reliable car profile under $20,000 for commuting, low running costs, and easy parking.";
 
 export default function HomePage() {
   const { copy } = useLocale();
   const [query, setQuery] = useState(defaultQuery);
-  const [budget, setBudget] = useState("12000");
+  const [budget, setBudget] = useState("20000");
   const [brand, setBrand] = useState("");
   const [bodyType, setBodyType] = useState("");
-  const [location, setLocation] = useState("Auckland");
-  const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
+  const [fuelType, setFuelType] = useState("");
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendResponse | null>(null);
   const [retrieval, setRetrieval] = useState<RetrieveResponse | null>(null);
@@ -42,10 +42,10 @@ export default function HomePage() {
         const maxPrice = parseIntegerInput(budget);
         const payload = {
           query,
-          max_price: maxPrice,
-          brand: brand || undefined,
+          budget_max: maxPrice,
+          brands: brand ? [brand] : undefined,
           body_type: bodyType || undefined,
-          location: location || undefined,
+          fuel_type: fuelType || undefined,
           limit: 20,
         };
 
@@ -53,7 +53,7 @@ export default function HomePage() {
 
         setRetrieval(retrieveData);
         setRecommendation(null);
-        setSelectedListingIds([]);
+        setSelectedProfileIds([]);
         setSelectedRecommendationId(null);
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : copy.adminWorkbench.defaultError);
@@ -61,24 +61,24 @@ export default function HomePage() {
     });
   }
 
-  function toggleSelection(listingId: string) {
+  function toggleSelection(profileId: string) {
     setError(null);
     setSelectedRecommendationId(null);
     setRecommendation(null);
-    setSelectedListingIds((current) => {
-      if (current.includes(listingId)) {
-        return current.filter((value) => value !== listingId);
+    setSelectedProfileIds((current) => {
+      if (current.includes(profileId)) {
+        return current.filter((value) => value !== profileId);
       }
       if (current.length >= 4) {
         setError(copy.adminWorkbench.selectionLimitError);
         return current;
       }
-      return [...current, listingId];
+      return [...current, profileId];
     });
   }
 
   function requestAdvice() {
-    if (selectedListingIds.length < 2) {
+    if (selectedProfileIds.length < 2) {
       setError(copy.adminWorkbench.selectionMinimumError);
       return;
     }
@@ -88,10 +88,10 @@ export default function HomePage() {
       try {
         const recommendData = await fetchRecommend({
           query,
-          selected_listing_ids: selectedListingIds,
+          selected_profile_ids: selectedProfileIds,
         });
         setRecommendation(recommendData);
-        setSelectedRecommendationId(recommendData.recommended_cars[0]?.listing_id ?? null);
+        setSelectedRecommendationId(recommendData.recommended_profiles[0]?.profile_id ?? null);
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : copy.adminWorkbench.defaultError);
       }
@@ -99,8 +99,8 @@ export default function HomePage() {
   }
 
   const selectedCar =
-    recommendation?.recommended_cars.find((car) => car.listing_id === selectedRecommendationId) ??
-    recommendation?.recommended_cars[0] ??
+    recommendation?.recommended_profiles.find((car) => car.profile_id === selectedRecommendationId) ??
+    recommendation?.recommended_profiles[0] ??
     null;
 
   return (
@@ -111,12 +111,12 @@ export default function HomePage() {
           budget={budget}
           brand={brand}
           bodyType={bodyType}
-          location={location}
+          fuelType={fuelType}
           onQueryChange={setQuery}
           onBudgetChange={setBudget}
           onBrandChange={setBrand}
           onBodyTypeChange={setBodyType}
-          onLocationChange={setLocation}
+          onFuelTypeChange={setFuelType}
           onSubmit={runWorkbenchQuery}
           loading={isRetrieving}
         />
@@ -139,12 +139,12 @@ export default function HomePage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="rounded-md bg-shell px-3 py-2 text-xs text-muted">
-                    {copy.adminWorkbench.selectedCount.replace("{count}", String(selectedListingIds.length))}
+                    {copy.adminWorkbench.selectedCount.replace("{count}", String(selectedProfileIds.length))}
                   </div>
                   <button
                     type="button"
                     onClick={requestAdvice}
-                    disabled={isAdvising || selectedListingIds.length < 2}
+                    disabled={isAdvising || selectedProfileIds.length < 2}
                     className="flex h-11 items-center justify-center rounded-md bg-gradient-to-b from-steel to-steelDeep px-4 text-sm font-medium text-white shadow-panel transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {isAdvising ? copy.adminWorkbench.advising : copy.adminWorkbench.getAdvice}
@@ -153,19 +153,19 @@ export default function HomePage() {
               </div>
               <div className="mt-4">
                 <RetrievalTable
-                  listings={retrieval?.listings ?? []}
-                  selectedListingIds={selectedListingIds}
+                  profiles={retrieval?.vehicle_profiles ?? []}
+                  selectedProfileIds={selectedProfileIds}
                   onToggleSelection={toggleSelection}
                 />
               </div>
             </section>
 
-            {recommendation?.recommended_cars.length ? (
-              recommendation.recommended_cars.map((car) => (
+            {recommendation?.recommended_profiles.length ? (
+              recommendation.recommended_profiles.map((car) => (
                 <RecommendationCard
-                  key={car.listing_id}
+                  key={car.profile_id}
                   car={car}
-                  selected={car.listing_id === selectedCar?.listing_id}
+                  selected={car.profile_id === selectedCar?.profile_id}
                   onSelect={setSelectedRecommendationId}
                 />
               ))
@@ -183,7 +183,7 @@ export default function HomePage() {
         </div>
 
         <div className="grid gap-4">
-          <ComparisonMatrix cars={recommendation?.recommended_cars ?? []} />
+          <ComparisonMatrix cars={recommendation?.recommended_profiles ?? []} />
         </div>
       </div>
     </div>

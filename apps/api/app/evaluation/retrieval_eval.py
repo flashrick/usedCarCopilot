@@ -22,86 +22,21 @@ MODEL_ALIASES: dict[str, str] = {
     "honda civic": "Honda Civic",
     "civic": "Honda Civic",
     "honda hr v": "Honda HR-V",
-    "honda hrv": "Honda HR-V",
-    "hr v": "Honda HR-V",
     "hrv": "Honda HR-V",
-    "mazda mazda2": "Mazda2",
-    "mazda2": "Mazda2",
-    "mazda mazda3": "Mazda3",
-    "mazda3": "Mazda3",
+    "mazda2": "Mazda Mazda2",
+    "mazda3": "Mazda Mazda3",
     "mazda cx 5": "Mazda CX-5",
     "cx 5": "Mazda CX-5",
 }
 
-STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "are",
-    "before",
-    "by",
-    "car",
-    "cars",
-    "check",
-    "choice",
-    "condition",
-    "for",
-    "from",
-    "is",
-    "it",
-    "main",
-    "most",
-    "of",
-    "or",
-    "should",
-    "the",
-    "these",
-    "to",
-    "used",
-    "use",
-    "variation",
-    "when",
-    "which",
-}
-
-TERM_ALIASES: dict[str, tuple[str, ...]] = {
-    "accident": ("repair", "body", "paint", "damage"),
-    "battery": ("hybrid",),
-    "brake": ("brakes", "braking"),
-    "brakes": ("brake", "braking"),
-    "cargo": ("boot", "space", "practicality"),
-    "cheap": ("budget", "cost", "price"),
-    "comfort": ("comfortable",),
-    "cost": ("price", "budget", "fuel", "maintenance", "running"),
-    "fuel": ("economy", "hybrid", "running"),
-    "hybrid": ("battery", "fuel", "economy"),
-    "inspection": ("check", "pre purchase", "warning"),
-    "maintenance": ("service", "repair", "wear"),
-    "parking": ("city", "compact"),
-    "practicality": ("space", "boot", "seat", "cargo"),
-    "reliable": ("reliability", "service"),
-    "reliability": ("reliable", "service"),
-    "repair": ("accident", "maintenance", "body"),
-    "risk": ("warning", "check", "inspection"),
-    "running": ("fuel", "cost", "economy"),
-    "safety": ("safe", "equipment"),
-    "service": ("maintenance", "history"),
-    "space": ("boot", "seat", "cargo", "practicality"),
-    "suspension": ("noise", "wear"),
-    "transmission": ("cvt", "gearbox"),
-    "tyre": ("tyres", "tire", "tires"),
-    "tyres": ("tyre", "tire", "tires"),
-    "wear": ("condition", "maintenance"),
-}
-
 THEME_ALIASES: dict[str, tuple[str, ...]] = {
-    "feature variation by year": ("newer trims", "trim level", "equipment", "features by year"),
-    "intended use match": ("genuine suv needs", "match it to actual", "intended driving pattern", "daily use"),
-    "parking damage": ("body repair", "accident repair", "paint", "panel gaps", "parking damage"),
-    "trim differences": ("trim level", "newer trims", "more expensive to maintain", "feature variation"),
-    "used condition": ("condition evidence", "clean service record", "neglected", "documentation", "overall condition"),
-    "used import condition": ("imported vehicle condition", "fresh import", "imported hatchback", "imported wagon"),
-    "visibility": ("road visibility", "higher seating position", "easy urban driving", "easy to drive and park"),
+    "maintenance cost": ("running cost", "maintenance", "service"),
+    "running cost": ("fuel", "tyre", "brake", "suspension", "running cost"),
+    "hybrid system condition": ("hybrid", "battery", "warning lights"),
+    "service history": ("service", "maintenance history", "records"),
+    "accident repair": ("body repair", "paint", "panel", "accident"),
+    "space practicality": ("space", "boot", "rear seat", "cargo"),
+    "premium feel": ("premium", "refined", "calm", "comfortable"),
 }
 
 
@@ -154,7 +89,7 @@ def evaluate_case(case: dict[str, Any], config: RetrievalEvalConfig) -> dict[str
         "expected_filter_keys": sorted(expected_filters),
         "filter_hits": filter_hits,
         "filter_recall": ratio(len(filter_hits), len(expected_filters)),
-        "listing_count": len(response.get("listings", [])),
+        "profile_count": len(response.get("vehicle_profiles", [])),
         "knowledge_count": len(response.get("knowledge", [])),
         "chunk_count": len(response.get("chunks", [])),
         "embedding_search_enabled": bool(response.get("debug", {}).get("embedding_search_enabled")),
@@ -166,12 +101,7 @@ def evaluate_case(case: dict[str, Any], config: RetrievalEvalConfig) -> dict[str
 def post_retrieve(api_url: str, query: str, limit: int, timeout_seconds: float) -> dict[str, Any]:
     url = f"{api_url.rstrip('/')}/retrieve"
     payload = json.dumps({"query": query, "limit": limit}).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    request = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             return json.loads(response.read().decode("utf-8"))
@@ -180,48 +110,21 @@ def post_retrieve(api_url: str, query: str, limit: int, timeout_seconds: float) 
 
 
 def build_summary(case_results: list[dict[str, Any]], config: RetrievalEvalConfig) -> dict[str, Any]:
-    total = len(case_results)
-    average_model_recall = average(result["model_recall"] for result in case_results)
-    average_risk_theme_recall = average(result["risk_theme_recall"] for result in case_results)
-    average_filter_recall = average(result["filter_recall"] for result in case_results)
-    embedding_enabled_cases = sum(1 for result in case_results if result["embedding_search_enabled"])
-    cases_with_chunks = sum(1 for result in case_results if result["chunk_count"] > 0)
-    perfect_model_cases = sum(1 for result in case_results if result["model_recall"] == 1.0)
-    perfect_risk_cases = sum(1 for result in case_results if result["risk_theme_recall"] == 1.0)
     weak_cases = sorted(
         case_results,
         key=lambda result: (result["model_recall"] + result["risk_theme_recall"] + result["filter_recall"]) / 3,
     )[:5]
-
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "api_url": config.api_url,
         "seed_dir": str(config.seed_dir),
         "limit": config.limit,
-        "case_count": total,
-        "average_model_recall": round(average_model_recall, 4),
-        "average_risk_theme_recall": round(average_risk_theme_recall, 4),
-        "average_filter_recall": round(average_filter_recall, 4),
-        "embedding_enabled_cases": embedding_enabled_cases,
-        "cases_with_chunks": cases_with_chunks,
-        "perfect_model_cases": perfect_model_cases,
-        "perfect_risk_theme_cases": perfect_risk_cases,
+        "case_count": len(case_results),
+        "average_model_recall": round(average(result["model_recall"] for result in case_results), 4),
+        "average_risk_theme_recall": round(average(result["risk_theme_recall"] for result in case_results), 4),
+        "average_filter_recall": round(average(result["filter_recall"] for result in case_results), 4),
         "embedding_model": first_non_empty(result.get("embedding_model") for result in case_results),
-        "weak_cases": [
-            {
-                "id": result["id"],
-                "model_recall": result["model_recall"],
-                "risk_theme_recall": result["risk_theme_recall"],
-                "filter_recall": result["filter_recall"],
-                "model_misses": [
-                    model for model in result["expected_models"] if model not in result["model_hits"]
-                ],
-                "risk_theme_misses": [
-                    theme for theme in result["expected_risk_themes"] if theme not in result["risk_theme_hits"]
-                ],
-            }
-            for result in weak_cases
-        ],
+        "weak_cases": weak_cases,
         "cases": case_results,
     }
 
@@ -233,18 +136,12 @@ def format_summary(summary: dict[str, Any]) -> str:
         f"- average model recall: {summary['average_model_recall']:.2%}",
         f"- average risk theme recall: {summary['average_risk_theme_recall']:.2%}",
         f"- average filter recall: {summary['average_filter_recall']:.2%}",
-        f"- embedding-enabled cases: {summary['embedding_enabled_cases']}/{summary['case_count']}",
-        f"- cases with semantic chunks: {summary['cases_with_chunks']}/{summary['case_count']}",
-        f"- perfect model coverage cases: {summary['perfect_model_cases']}/{summary['case_count']}",
-        f"- perfect risk-theme coverage cases: {summary['perfect_risk_theme_cases']}/{summary['case_count']}",
     ]
     if summary["weak_cases"]:
         lines.append("- weakest cases:")
         for case in summary["weak_cases"]:
             lines.append(
-                "  - "
-                f"{case['id']}: model={case['model_recall']:.2%}, "
-                f"risk={case['risk_theme_recall']:.2%}, filter={case['filter_recall']:.2%}"
+                f"  - {case['id']}: model={case['model_recall']:.2%}, risk={case['risk_theme_recall']:.2%}, filter={case['filter_recall']:.2%}"
             )
     return "\n".join(lines)
 
@@ -253,188 +150,106 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
     lines = [
         "# Retrieval Eval Report",
         "",
-        "## Run Metadata",
-        "",
         f"- Generated at: `{summary['generated_at']}`",
         f"- API URL: `{summary['api_url']}`",
         f"- Seed data: `{summary['seed_dir']}`",
-        f"- Retrieve limit: `{summary['limit']}`",
         f"- Embedding model: `{summary.get('embedding_model') or 'unknown'}`",
-        "",
-        "## Summary",
         "",
         f"- Cases: {summary['case_count']}",
         f"- Average model recall: {summary['average_model_recall']:.2%}",
         f"- Average risk theme recall: {summary['average_risk_theme_recall']:.2%}",
         f"- Average filter recall: {summary['average_filter_recall']:.2%}",
-        f"- Embedding-enabled cases: {summary['embedding_enabled_cases']}/{summary['case_count']}",
-        f"- Cases with semantic chunks: {summary['cases_with_chunks']}/{summary['case_count']}",
-        f"- Perfect model coverage cases: {summary['perfect_model_cases']}/{summary['case_count']}",
-        f"- Perfect risk-theme coverage cases: {summary['perfect_risk_theme_cases']}/{summary['case_count']}",
-        "",
-        "## Weakest Cases",
         "",
     ]
-    for case in summary["weak_cases"]:
-        model_misses = ", ".join(case["model_misses"]) or "none"
-        risk_misses = ", ".join(case["risk_theme_misses"]) or "none"
-        lines.extend(
-            [
-                f"### {case['id']}",
-                "",
-                f"- Model recall: {case['model_recall']:.2%}",
-                f"- Risk theme recall: {case['risk_theme_recall']:.2%}",
-                f"- Filter recall: {case['filter_recall']:.2%}",
-                f"- Missed models: {model_misses}",
-                f"- Missed risk themes: {risk_misses}",
-                "",
-            ]
-        )
-
-    lines.extend(["## Case Details", ""])
     for case in summary["cases"]:
         lines.extend(
             [
-                f"### {case['id']}",
+                f"## {case['id']}",
                 "",
                 f"- Query: {case['query']}",
                 f"- Expected models: {', '.join(case['expected_models']) or 'none'}",
                 f"- Retrieved models: {', '.join(case['retrieved_models']) or 'none'}",
-                f"- Model hits: {', '.join(case['model_hits']) or 'none'}",
+                f"- Profile count: {case['profile_count']}",
                 f"- Risk theme hits: {', '.join(case['risk_theme_hits']) or 'none'}",
-                f"- Filter hits: {', '.join(case['filter_hits']) or 'none'}",
-                f"- Listings / knowledge / chunks: {case['listing_count']} / {case['knowledge_count']} / {case['chunk_count']}",
                 "",
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
 
 
+def normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", value.lower())).strip()
+
+
+def canonical_model_name(value: str) -> str:
+    return MODEL_ALIASES.get(normalize_text(value), value)
+
+
 def extract_models(response: dict[str, Any]) -> set[str]:
-    models: set[str] = set()
-    for section in ("listings", "knowledge", "chunks"):
-        for item in response.get(section, []):
-            brand = item.get("brand")
-            model = item.get("model")
-            if brand and model:
-                models.add(canonical_model_name(f"{brand} {model}"))
-    for model in response.get("debug", {}).get("candidate_models", []):
-        models.add(canonical_model_name(model))
+    models = set()
+    for profile in response.get("vehicle_profiles", []):
+        brand = profile.get("brand")
+        model = profile.get("model")
+        if brand and model:
+            display = f"{brand} {model}"
+            if display == "Mazda Mazda2" or display == "Mazda Mazda3" or display == "Mazda CX-5":
+                models.add(display)
+            else:
+                models.add(display)
     return models
 
 
 def collect_evidence_text(response: dict[str, Any]) -> str:
     parts: list[str] = []
-    for listing in response.get("listings", []):
+    for profile in response.get("vehicle_profiles", []):
         parts.extend(
-            str(value)
-            for value in (
-                listing.get("title"),
-                listing.get("description"),
-                listing.get("body_type"),
-                listing.get("fuel_type"),
+            str(profile.get(field, ""))
+            for field in (
+                "title",
+                "suitability_summary",
+                "comfort_summary",
+                "space_summary",
+                "reliability_summary",
+                "valuation_notes",
             )
-            if value
         )
-    for source in response.get("knowledge", []):
-        parts.extend(str(value) for value in (source.get("title"), source.get("summary"), source.get("text")) if value)
+    for knowledge in response.get("knowledge", []):
+        parts.extend([str(knowledge.get("summary", "")), str(knowledge.get("text", ""))])
     for chunk in response.get("chunks", []):
-        parts.extend(str(value) for value in (chunk.get("source_title"), chunk.get("text")) if value)
+        parts.append(str(chunk.get("text", "")))
     return normalize_text(" ".join(parts))
+
+
+def risk_theme_matches(theme: str, evidence_text: str) -> bool:
+    normalized_theme = normalize_text(theme)
+    if normalized_theme in evidence_text:
+        return True
+    for alias in THEME_ALIASES.get(normalized_theme, ()):
+        if normalize_text(alias) in evidence_text:
+            return True
+    return False
 
 
 def score_filters(expected_filters: dict[str, Any], applied_filters: dict[str, Any]) -> list[str]:
     hits: list[str] = []
     for key, expected_value in expected_filters.items():
-        if key == "max_price" and applied_filters.get("max_price") == expected_value:
-            hits.append(key)
-        elif key == "target_price" and applied_filters.get("max_price") == expected_value:
-            hits.append(key)
-        elif key == "location" and normalize_text(applied_filters.get("location")) == normalize_text(expected_value):
-            hits.append(key)
-        elif key == "body_type" and normalize_text(applied_filters.get("body_type")) == normalize_text(expected_value):
-            hits.append(key)
-        elif key == "brand" and normalize_text(applied_filters.get("brand")) == normalize_text(expected_value):
-            hits.append(key)
-        elif key == "brands":
-            requested_brands = {normalize_text(brand) for brand in expected_value}
-            applied_brands = {normalize_text(brand) for brand in applied_filters.get("brands", [])}
-            applied_brand = normalize_text(applied_filters.get("brand"))
-            if applied_brand:
-                applied_brands.add(applied_brand)
-            if requested_brands and requested_brands.issubset(applied_brands):
-                hits.append(key)
-        elif key == "model" and canonical_model_name(str(expected_value)) in [
-            canonical_model_name(model) for model in applied_filters.get("models", [])
-        ]:
-            hits.append(key)
-        elif key == "compare_models":
-            requested = {canonical_model_name(model) for model in expected_value}
-            applied = {canonical_model_name(model) for model in applied_filters.get("models", [])}
-            if requested and requested.issubset(applied):
-                hits.append(key)
-        elif key == "exclude_body_type" and normalize_text(applied_filters.get("exclude_body_type")) == normalize_text(expected_value):
-            hits.append(key)
-        elif key == "fuel_type" and normalize_text(expected_value) in normalize_text(applied_filters.get("fuel_type")):
-            hits.append(key)
-        elif normalize_expected_filter(expected_value) == normalize_expected_filter(applied_filters.get(key)):
+        actual_value = applied_filters.get(key)
+        if actual_value == expected_value:
             hits.append(key)
     return hits
 
 
-def normalize_expected_filter(value: Any) -> Any:
-    if isinstance(value, str):
-        return normalize_text(value)
-    if isinstance(value, list):
-        return sorted(normalize_text(item) for item in value)
-    return value
-
-
-def risk_theme_matches(theme: str, normalized_text: str) -> bool:
-    normalized_theme = normalize_text(theme)
-    if normalized_theme in normalized_text:
-        return True
-    if any(normalize_text(alias) in normalized_text for alias in THEME_ALIASES.get(normalized_theme, ())):
-        return True
-
-    terms = [term for term in normalized_theme.split() if term not in STOPWORDS and len(term) > 2]
-    if not terms:
-        return False
-
-    matched = sum(1 for term in terms if term_matches(term, normalized_text))
-    required = 1 if len(terms) == 1 else max(2, round(len(terms) * 0.6))
-    return matched >= required
-
-
-def term_matches(term: str, normalized_text: str) -> bool:
-    if re.search(rf"\b{re.escape(term)}s?\b", normalized_text):
-        return True
-    return any(alias in normalized_text for alias in TERM_ALIASES.get(term, ()))
-
-
-def canonical_model_name(value: str) -> str:
-    normalized = normalize_text(value)
-    return MODEL_ALIASES.get(normalized, value)
-
-
-def normalize_text(value: Any) -> str:
-    text = "" if value is None else str(value).lower()
-    text = text.replace("-", " ")
-    text = re.sub(r"[^a-z0-9]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def ratio(numerator: int, denominator: int) -> float:
-    if denominator == 0:
+def ratio(hit_count: int, expected_count: int) -> float:
+    if expected_count <= 0:
         return 1.0
-    return round(numerator / denominator, 4)
+    return round(hit_count / expected_count, 4)
 
 
 def average(values: Any) -> float:
-    collected = list(values)
-    if not collected:
+    values = list(values)
+    if not values:
         return 0.0
-    return sum(collected) / len(collected)
+    return sum(values) / len(values)
 
 
 def first_non_empty(values: Any) -> Any:

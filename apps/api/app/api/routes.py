@@ -4,8 +4,8 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select, text
 
 from app.db.connection import get_session
-from app.db.orm import KnowledgeSourceRecord, ListingRecord
-from app.models.schemas import KnowledgeSource, Listing, RecommendRequest, RecommendResponse, RetrieveRequest, RetrieveResponse
+from app.db.orm import KnowledgeSourceRecord, VehicleProfileRecord
+from app.models.schemas import KnowledgeSource, RecommendRequest, RecommendResponse, RetrieveRequest, RetrieveResponse, VehicleProfile
 from app.recommendation.service import RecommendationRequestError, recommend
 from app.retrieval.service import retrieve
 
@@ -20,19 +20,19 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/listings", response_model=list[Listing])
-def list_listings(limit: int = 20) -> list[ListingRecord]:
+@router.get("/vehicle-profiles", response_model=list[VehicleProfile])
+def list_vehicle_profiles(limit: int = 20) -> list[VehicleProfileRecord]:
     limit = max(1, min(limit, 100))
     with get_session() as session:
         return list(
             session.scalars(
-                select(ListingRecord)
+                select(VehicleProfileRecord)
                 .order_by(
-                    ListingRecord.brand,
-                    ListingRecord.model,
-                    ListingRecord.price.is_(None),
-                    ListingRecord.price.asc(),
-                    ListingRecord.listing_id,
+                    VehicleProfileRecord.brand,
+                    VehicleProfileRecord.model,
+                    VehicleProfileRecord.estimated_price_mid_nzd.is_(None),
+                    VehicleProfileRecord.estimated_price_mid_nzd.asc(),
+                    VehicleProfileRecord.profile_id,
                 )
                 .limit(limit)
             )

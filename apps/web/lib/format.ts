@@ -15,6 +15,22 @@ export function formatMileage(value?: number | null, locale: Locale = defaultLoc
   return `${new Intl.NumberFormat(locale === "zh-CN" ? "zh-CN" : "en-NZ").format(value)} km`;
 }
 
+export function formatMoneyRange(
+  minimum?: number | null,
+  maximum?: number | null,
+  locale: Locale = defaultLocale,
+): string {
+  if (minimum === null || minimum === undefined || maximum === null || maximum === undefined) {
+    return translateValue(null, locale);
+  }
+  return `${formatMoney(minimum, locale)} - ${formatMoney(maximum, locale)}`;
+}
+
+export function formatConsumption(value?: number | null): string {
+  if (value === null || value === undefined) return "N/A";
+  return `${value.toFixed(1)} L/100km`;
+}
+
 export function severityTone(severity: Severity): string {
   if (severity === "high") return "bg-riskHigh/70 text-rose-950";
   if (severity === "medium") return "bg-riskMedium/80 text-amber-950";

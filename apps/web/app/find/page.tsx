@@ -60,12 +60,6 @@ export default function FindSetupPage() {
               onChange={(value) => updateField("budget", value)}
               placeholder="12000"
             />
-            <InputField
-              label={copy.findSetup.location}
-              value={filters.location}
-              onChange={(value) => updateField("location", value)}
-              placeholder="Auckland"
-            />
 
             <SelectField
               label={copy.findSetup.brand}
@@ -94,12 +88,6 @@ export default function FindSetupPage() {
               localeLabel={(option) =>
                 option ? translateValue(option, locale) : formatTemplate(copy.findSetup.anyOption, { label: copy.findSetup.fuelType })
               }
-            />
-            <InputField
-              label={copy.findSetup.maxMileage}
-              value={filters.mileage}
-              onChange={(value) => updateField("mileage", value)}
-              placeholder="90000"
             />
           </div>
 

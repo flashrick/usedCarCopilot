@@ -2,13 +2,13 @@
 
 ## Goal
 
-Build an AI Used Car Decision Copilot that demonstrates real AI engineering ability through RAG, hybrid retrieval, structured filtering, citation-grounded generation, evaluation, and a deployable API/UI experience.
+Build an AI Used Car Decision Copilot that demonstrates real AI engineering ability through vehicle-profile RAG, hybrid retrieval, deterministic valuation, citation-grounded generation, evaluation, and a deployable API/UI experience.
 
 ## Current Stage
 
-Stage: Live AI provider validation workflow added.
+Stage: Vehicle-profile pivot with deterministic valuation implemented.
 
-The repository now has planning documents, seed data, and the first FastAPI/PostgreSQL backend scaffold. The schema includes pgvector support and tables for listings, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion, local deterministic chunk embedding generation, pgvector semantic retrieval, deterministic citation-aware recommendation generation, provider selectors for embeddings and recommendations, selectable AI recommendation providers with deterministic fallback, retrieval/recommendation eval runners, live-provider validation tooling, and focused backend regression tests have been run successfully against a local pgvector Postgres container.
+The repository now has planning documents, seed data, and a PostgreSQL-backed FastAPI scaffold centered on `vehicle_profiles` instead of live listings. The schema includes pgvector support and tables for vehicle profiles, knowledge sources, document chunks, chunk embeddings, eval cases, ingestion runs, and request logs. Runtime database access uses SQLAlchemy ORM sessions and mapped records. Seed ingestion now computes deterministic NZ valuation ranges per profile, local deterministic chunk embedding generation remains in place, pgvector semantic retrieval is profile-aware, and the recommendation flow compares user-selected vehicle profiles with citations and valuation summaries.
 
 ## Milestones
 
@@ -31,11 +31,11 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 - Completed: add OpenAI-backed structured recommendation provider behind the existing `/recommend` JSON contract, with deterministic fallback on missing key, API failure, or citation/schema validation failure.
 - Completed: add selectable DeepSeek, Qwen, and Kimi recommendation providers through OpenAI-compatible Chat Completions with JSON-mode output, citation validation, and deterministic fallback.
 - Completed: add repeatable live AI-provider validation tooling for `openai`, `deepseek`, `qwen`, and `kimi`, with missing-key skips and failure on deterministic fallback or invalid citations.
-- In progress: build ingestion and embedding pipeline. Seed ingestion, local embedding generation, and embedding provider selection are implemented and verified; external provider implementation is pending.
-- In progress: build retrieval API and debug output. Structured retrieval and pgvector semantic chunk retrieval are implemented and service-verified.
-- In progress: add evaluation workflow and reporting. Retrieval and deterministic recommendation eval reports exist; LLM generation eval is pending.
-- In progress: build recommendation API with citation-aware JSON output. Deterministic ranked recommendations, recommendation provider selection, OpenAI-backed structured generation, and OpenAI-compatible DeepSeek/Qwen/Kimi generation are implemented; live API-key validation and prompt quality tuning are pending.
-- Pending: build decision-workbench UI.
+- Completed: pivot the canonical dataset from live listings to structured vehicle profiles.
+- Completed: implement deterministic NZ valuation ranges for each ingested vehicle profile.
+- Completed: replace listing-based `/retrieve` and `/recommend` contracts with vehicle-profile contracts.
+- Completed: update the admin workbench and shortlist flow to compare 2-4 selected vehicle profiles.
+- In progress: refresh broader project documentation and non-admin UX around the new profile-first scope.
 - Pending: add deployment, screenshots, demo video, and public README polish.
 
 ## Accepted Decisions
@@ -44,14 +44,15 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 - The MVP should be narrow before it is broad.
 - Initial data scope should focus on Toyota, Mazda, and Honda.
 - The first market is Auckland, New Zealand.
-- The first listing source is Turners data normalized into `data/seed/listings.jsonl`.
-- Canonical seed data lives in `data/seed/`; raw listing export lives in `data/raw/`.
+- Canonical seed data lives in `data/seed/`; archived raw listing export still lives in `data/raw/`.
+- The active dataset is `data/seed/vehicle_profiles.jsonl`, not live market listings.
 - The technical direction is FastAPI, Next.js, PostgreSQL, and pgvector.
 - The first backend uses FastAPI with psycopg and PostgreSQL, not SQLite.
 - Runtime database access uses SQLAlchemy ORM; raw SQL is reserved for migration files and minimal probes.
 - The first retrieval endpoint started as non-LLM and non-embedding so the database contract could be validated before vector search and generation.
 - The first embedding provider is a deterministic local hash embedding model so vector retrieval can be developed without external API keys. It is a development scaffold, not the final production embedding provider.
-- The system must combine structured listing filters with unstructured semantic retrieval.
+- The system must combine structured vehicle-profile filters with unstructured semantic retrieval.
+- Deterministic valuation is part of the product contract for v1.
 - Recommendation claims must be grounded with evidence citations.
 - Evaluation is part of the MVP, not a later optional polish step.
 
@@ -63,7 +64,7 @@ The repository now has planning documents, seed data, and the first FastAPI/Post
 
 ## Blockers
 
-- No current implementation blocker for local hybrid retrieval or deterministic recommendations.
+- No current implementation blocker for local hybrid retrieval, deterministic valuation, or deterministic recommendations.
 - External embedding and LLM provider choice remains open before production-quality recommendation generation.
 
 ## Next Skill
@@ -73,8 +74,8 @@ Recommended next skill: `test-engineer` for live OpenAI-provider validation and 
 ## Next Actions
 
 1. Run `python3 apps/api/scripts/validate_ai_providers.py --fail-on-skip` after real provider keys are available.
-2. Tune provider prompts against the 20 eval cases if live generations expose wording, citation, or fallback issues.
-3. Continue frontend decision-workbench integration using the stable `/retrieve` and `/recommend` response contracts.
+2. Tune provider prompts against the eval cases if live generations expose wording, citation, or fallback issues.
+3. Refresh remaining public docs and user-facing pages that still describe the old listing-first workflow.
 4. Add deployment, screenshots, demo video, and public README polish after the UI can run end to end.
 5. Add hosted-environment provider configuration notes once the API deployment target is chosen.
 
@@ -101,3 +102,4 @@ Recommended next skill: `test-engineer` for live OpenAI-provider validation and 
 - Added OpenAI Responses API recommendation generation with Structured Outputs, local citation validation, deterministic fallback, and regression tests for success and fallback paths.
 - Added DeepSeek, Qwen, and Kimi recommendation provider options through OpenAI-compatible Chat Completions with JSON-mode response handling and fallback regression tests.
 - Added repeatable live AI-provider validation tooling; local execution skips providers without API keys and fails providers that fall back or produce invalid citations.
+- Pivoted the backend and admin UI from live used-car listings to structured vehicle-profile retrieval with deterministic valuation.

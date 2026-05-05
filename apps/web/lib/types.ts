@@ -1,21 +1,44 @@
 export type Severity = "low" | "medium" | "high";
 
-export type Listing = {
-  listing_id: string;
+export type VehicleProfile = {
+  profile_id: string;
   title: string;
   brand: string;
   model: string;
-  year?: number | null;
-  price?: number | null;
-  mileage?: number | null;
-  transmission?: string | null;
-  fuel_type?: string | null;
-  seller_type?: string | null;
-  location?: string | null;
-  body_type?: string | null;
-  source: string;
-  source_url?: string | null;
-  description?: string | null;
+  generation_label?: string | null;
+  facelift_label?: string | null;
+  year_start: number;
+  year_end: number;
+  trim: string;
+  engine_code?: string | null;
+  engine_description: string;
+  displacement_l?: number | null;
+  transmission: string;
+  drivetrain?: string | null;
+  fuel_type: string;
+  body_type: string;
+  seat_count?: number | null;
+  fuel_consumption_l_per_100km?: number | null;
+  power_kw?: number | null;
+  power_hp?: number | null;
+  nvh_summary?: string | null;
+  ride_handling_summary?: string | null;
+  comfort_summary?: string | null;
+  space_summary?: string | null;
+  reliability_summary?: string | null;
+  common_issues: string[];
+  maintenance_cost_band?: string | null;
+  suitability_summary?: string | null;
+  estimated_price_min_nzd?: number | null;
+  estimated_price_mid_nzd?: number | null;
+  estimated_price_max_nzd?: number | null;
+  valuation_confidence?: string | null;
+  valuation_market?: string | null;
+  valuation_as_of_date?: string | null;
+  assumed_condition?: string | null;
+  assumed_mileage_km?: number | null;
+  valuation_method?: string | null;
+  valuation_notes?: string | null;
 };
 
 export type KnowledgeSource = {
@@ -27,6 +50,10 @@ export type KnowledgeSource = {
   model: string;
   year_range?: string | null;
   market?: string | null;
+  profile_id?: string | null;
+  generation_label?: string | null;
+  trim?: string | null;
+  powertrain_tags: string[];
   tags: string[];
   summary?: string | null;
   text: string;
@@ -41,6 +68,7 @@ export type RetrievedChunk = {
   source_type: string;
   brand: string;
   model: string;
+  profile_id?: string | null;
   evidence_level?: string | null;
   text: string;
   similarity?: number | null;
@@ -48,21 +76,19 @@ export type RetrievedChunk = {
 
 export type RetrieveRequest = {
   query?: string;
-  max_price?: number;
-  max_mileage?: number;
-  brand?: string;
+  budget_max?: number;
   brands?: string[];
   models?: string[];
   body_type?: string;
   fuel_type?: string;
-  location?: string;
+  transmission?: string;
   limit?: number;
 };
 
 export type RetrieveResponse = {
   query?: string | null;
   applied_filters: Record<string, unknown>;
-  listings: Listing[];
+  vehicle_profiles: VehicleProfile[];
   knowledge: KnowledgeSource[];
   chunks: RetrievedChunk[];
   debug: Record<string, unknown>;
@@ -88,25 +114,27 @@ export type RecommendationEvidence = {
   snippet: string;
 };
 
-export type RecommendedCar = {
-  listing_id: string;
+export type RecommendedProfile = {
+  profile_id: string;
   title: string;
   match_score: number;
+  powertrain_summary: string;
   why_it_matches: string[];
+  trade_offs: string[];
   risk_flags: RecommendationRiskFlag[];
-  price_commentary: string;
+  valuation_summary: string;
   evidence_ids: string[];
   next_steps: string[];
 };
 
 export type RecommendRequest = {
   query?: string;
-  selected_listing_ids: string[];
+  selected_profile_ids: string[];
 };
 
 export type RecommendResponse = {
   query_summary: QuerySummary;
-  recommended_cars: RecommendedCar[];
+  recommended_profiles: RecommendedProfile[];
   evidence: RecommendationEvidence[];
   debug: Record<string, unknown>;
 };

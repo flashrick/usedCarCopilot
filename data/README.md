@@ -31,9 +31,15 @@ python3 scripts/validate_seed_data.py
 Refresh market catalog outputs and safety-rating outputs with matching build/diff conventions:
 
 ```bash
-python3 scripts/sync_market_catalog.py build --market all
 python3 scripts/sync_safety_ratings.py build --market all
+python3 scripts/sync_market_catalog.py build --market all
 ```
+
+Notes:
+
+- `scripts/sync_safety_ratings.py` now uses the official NHTSA SafetyRatings API for `US` rows by first resolving `VehicleId` from `modelyear/make/model`, then fetching detailed ratings from `VehicleId/{id}`.
+- `scripts/sync_market_catalog.py` expects `data/seed/safety_ratings.jsonl` to exist and will stop if the safety sync has not been run first for the target market.
+- `CN` rows currently remain `unrated` until a separate official source is wired in.
 
 ## Current Data Coverage
 

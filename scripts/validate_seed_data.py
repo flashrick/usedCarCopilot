@@ -315,6 +315,8 @@ def validate_safety_ratings(
                 errors.append(f"{profile_id}: rated safety rows must have integer stars between 1 and 5")
             if not isinstance(source, str) or not source.strip():
                 errors.append(f"{profile_id}: rated safety rows must have a non-empty source")
+            if row.get("market") == "US" and "NHTSA" not in source:
+                errors.append(f"{profile_id}: US rated safety rows must cite NHTSA as the source")
         if status == "unrated":
             if stars is not None:
                 errors.append(f"{profile_id}: unrated safety rows must not include stars")

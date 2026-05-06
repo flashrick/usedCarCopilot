@@ -7,9 +7,9 @@ import {
   CalendarRange,
   CarFront,
   CircleDollarSign,
-  Cog,
   Flame,
   Loader2,
+  Settings2,
   ShieldCheck,
   Sparkles,
   Zap,
@@ -557,7 +557,7 @@ function ShortlistCard({
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetaTile icon={CarFront} label={bodyLabel} value={translateValue(listing.body_type, locale)} />
         <MetaTile icon={Zap} label={fuelLabel} value={translateValue(listing.fuel_type, locale)} />
-        <MetaTile icon={Cog} label={transmissionLabel} value={transmissionValue} />
+        <MetaTile icon={Settings2} label={transmissionLabel} value={transmissionValue} />
         <MetaTile icon={ShieldCheck} label={safetyLabel} value={safetyValue} />
         <MetaTile icon={CalendarRange} label={yearLabel} value={`${listing.year_start}-${listing.year_end}`} />
       </div>
@@ -619,12 +619,12 @@ function MetaTile({
   value: string;
 }) {
   return (
-    <div className="rounded-lg border border-line/70 bg-shell/80 p-3">
-      <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-mutedSoft">
-        <Icon className="h-4 w-4" />
-        {label}
+    <div className="min-w-0 rounded-lg border border-line/70 bg-shell/80 p-3">
+      <div className="flex min-w-0 items-center gap-2 text-xs uppercase tracking-[0.18em] text-mutedSoft">
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="truncate">{label}</span>
       </div>
-      <div className="mt-2 text-sm text-textStrong">{value}</div>
+      <div className="mt-2 break-words text-sm leading-5 text-textStrong">{value}</div>
     </div>
   );
 }

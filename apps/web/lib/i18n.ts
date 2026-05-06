@@ -196,7 +196,7 @@ const copy = {
       year: "Year",
       location: "Location",
       fuel: "Fuel",
-      transmission: "Transmission",
+      transmission: "Gearbox",
       safety: "Safety",
       safetyUnrated: "Official safety data unavailable",
       riskFlags: "Risk flags",

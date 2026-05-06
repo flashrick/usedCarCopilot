@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import json
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ try:
         diff_by_id,
         normalize_market,
         read_json,
+        read_jsonl,
         write_json,
         write_jsonl,
     )
@@ -25,12 +27,14 @@ except ModuleNotFoundError:
         diff_by_id,
         normalize_market,
         read_json,
+        read_jsonl,
         write_json,
         write_jsonl,
     )
 
 
 DEFAULT_SOURCE_PATH = DEFAULT_SEED_DIR / "market_catalog_seed.json"
+DEFAULT_SAFETY_SOURCE_PATH = DEFAULT_SEED_DIR / "safety_ratings.jsonl"
 
 
 @dataclass(frozen=True)
@@ -57,7 +61,24 @@ def select_models(models: list[dict[str, Any]], market: str) -> list[dict[str, A
     return [item for item in models if item.get("market") == market]
 
 
-def build_outputs(source: dict[str, Any], market: str, snapshot_date: date | None = None) -> BuildResult:
+def index_safety_rows(rows: list[dict[str, Any]], market: str) -> dict[str, dict[str, Any]]:
+    indexed: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        row_market = str(row.get("market", "")).upper()
+        if market != "ALL" and row_market != market:
+            continue
+        profile_id = str(row.get("profile_id", ""))
+        if profile_id:
+            indexed[profile_id] = row
+    return indexed
+
+
+def build_outputs(
+    source: dict[str, Any],
+    market: str,
+    safety_rows: dict[str, dict[str, Any]] | None = None,
+    snapshot_date: date | None = None,
+) -> BuildResult:
     snapshot = snapshot_date or date.today()
     models = select_models(list(source.get("models", [])), market)
     eval_cases = [
@@ -115,15 +136,16 @@ def build_outputs(source: dict[str, Any], market: str, snapshot_date: date | Non
         )
 
         for profile in item.get("profiles", []):
+            safety = safety_rows.get(profile["profile_id"], {}) if safety_rows else {}
             vehicle_profiles.append(
                 {
                     **profile,
                     "transmission_detail": profile.get("transmission_detail"),
                     "transmission_maintenance_risk": profile.get("transmission_maintenance_risk"),
                     "transmission_risk_note": profile.get("transmission_risk_note"),
-                    "safety_rating_stars": profile.get("safety_rating_stars"),
-                    "safety_rating_source": profile.get("safety_rating_source"),
-                    "safety_rating_status": profile.get("safety_rating_status"),
+                    "safety_rating_stars": safety.get("safety_rating_stars", profile.get("safety_rating_stars")),
+                    "safety_rating_source": safety.get("safety_rating_source", profile.get("safety_rating_source")),
+                    "safety_rating_status": safety.get("safety_rating_status", profile.get("safety_rating_status")),
                     "market": item["market"],
                     "market_variant_id": market_variant_id,
                     "brand": item["brand"],
@@ -193,9 +215,35 @@ def build_diff(previous: dict[str, Any], current: dict[str, Any]) -> dict[str, A
         },
     }
 
+def load_required_safety_rows(seed_dir: Path, source: dict[str, Any], market: str) -> dict[str, dict[str, Any]]:
+    path = seed_dir / DEFAULT_SAFETY_SOURCE_PATH.name
+    if not path.exists():
+        raise SystemExit(
+            f"Missing safety ratings seed: {path}. Run `python3 scripts/sync_safety_ratings.py build --market {market.lower()}` first."
+        )
+    indexed = index_safety_rows(read_jsonl(path), market)
+
+    expected_profile_ids = {
+        profile["profile_id"]
+        for item in select_models(list(source.get("models", [])), market)
+        for profile in item.get("profiles", [])
+    }
+    missing = sorted(profile_id for profile_id in expected_profile_ids if profile_id not in indexed)
+    if missing:
+        preview = ", ".join(missing[:3])
+        suffix = "..." if len(missing) > 3 else ""
+        raise SystemExit(
+            "Safety ratings seed is incomplete for the requested market. "
+            f"Missing profile_ids: {preview}{suffix}. "
+            f"Run `python3 scripts/sync_safety_ratings.py build --market {market.lower()}` first."
+        )
+    return indexed
+
+
 def run_build(seed_dir: Path, source_path: Path, market: str, snapshot_dir: Path) -> None:
     source = read_json(source_path)
-    result = build_outputs(source, market)
+    safety_rows = load_required_safety_rows(seed_dir, source, market)
+    result = build_outputs(source, market, safety_rows=safety_rows)
     write_outputs(seed_dir, result)
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     snapshot_name = f"market-catalog-{market.lower()}-latest.json"
@@ -211,7 +259,8 @@ def run_build(seed_dir: Path, source_path: Path, market: str, snapshot_dir: Path
 
 def run_diff(seed_dir: Path, source_path: Path, market: str, snapshot_dir: Path, report_path: Path | None) -> None:
     source = read_json(source_path)
-    result = build_outputs(source, market)
+    safety_rows = load_required_safety_rows(seed_dir, source, market)
+    result = build_outputs(source, market, safety_rows=safety_rows)
     current = snapshot_payload(result)
     snapshot_name = f"market-catalog-{market.lower()}-latest.json"
     previous_path = snapshot_dir / snapshot_name

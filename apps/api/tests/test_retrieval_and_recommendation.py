@@ -26,9 +26,10 @@ from app.retrieval.service import (
     select_diverse_profiles,
 )
 from app.valuation.service import compute_profile_valuation
-from scripts.sync_market_catalog import build_diff, build_outputs, read_json
+from scripts.sync_market_catalog import build_diff, build_outputs, index_safety_rows, read_json
 from scripts.sync_safety_ratings import build_diff as build_safety_diff
 from scripts.sync_safety_ratings import build_outputs as build_safety_outputs
+from scripts.sync_safety_ratings import choose_vehicle, parse_overall_rating
 from scripts.sync_seed_common import build_sync_parser
 from starlette.requests import Request
 
@@ -255,7 +256,11 @@ class RetrievalParsingTests(unittest.TestCase):
 class CatalogScriptTests(unittest.TestCase):
     def test_build_outputs_generates_market_scoped_catalog(self) -> None:
         source = read_json(REPO_ROOT / "data" / "seed" / "market_catalog_seed.json")
-        result = build_outputs(source, "US")
+        safety_rows = index_safety_rows(
+            read_json(REPO_ROOT / "data" / "seed" / "snapshots" / "safety-ratings-all-latest.json")["safety_ratings"],
+            "US",
+        )
+        result = build_outputs(source, "US", safety_rows=safety_rows)
 
         self.assertGreaterEqual(len(result.canonical_models), 5)
         self.assertTrue(all(row["market"] == "US" for row in result.market_variants))
@@ -290,6 +295,140 @@ class CatalogScriptTests(unittest.TestCase):
         self.assertGreaterEqual(len(result.safety_ratings), 5)
         self.assertTrue(all(row["market"] == "CN" for row in result.safety_ratings))
         self.assertTrue(all("safety_rating_status" in row for row in result.safety_ratings))
+
+    def test_parse_overall_rating_accepts_numeric_and_not_rated_values(self) -> None:
+        self.assertEqual(parse_overall_rating("5"), 5)
+        self.assertEqual(parse_overall_rating("4 Stars"), 4)
+        self.assertIsNone(parse_overall_rating("Not Rated"))
+
+    def test_choose_vehicle_prefers_matching_drivetrain(self) -> None:
+        profile = {"drivetrain": "fwd", "body_type": "suv", "fuel_type": "petrol", "trim": "EX"}
+        chosen = choose_vehicle(
+            profile,
+            [
+                {"VehicleId": 1, "VehicleDescription": "2020 Honda CR-V SUV AWD"},
+                {"VehicleId": 2, "VehicleDescription": "2020 Honda CR-V SUV FWD"},
+            ],
+        )
+
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen["VehicleId"], 2)
+
+    def test_safety_sync_build_outputs_uses_official_api_client_for_us_rows(self) -> None:
+        class FakeNhtsaClient:
+            def list_vehicle_versions(self, year: int, make: str, model: str) -> list[dict[str, object]]:
+                if (year, make, model) == (2020, "Honda", "CR-V"):
+                    return [
+                        {"VehicleId": 14823, "VehicleDescription": "2020 Honda CR-V SUV AWD"},
+                        {"VehicleId": 14820, "VehicleDescription": "2020 Honda CR-V SUV FWD"},
+                    ]
+                return []
+
+            def get_vehicle_rating(self, vehicle_id: int) -> dict[str, object]:
+                self.last_vehicle_id = vehicle_id
+                return {
+                    "OverallRating": "5",
+                    "OverallFrontCrashRating": "5",
+                    "OverallSideCrashRating": "5",
+                    "RolloverRating": "4",
+                    "ComplaintsCount": 313,
+                    "RecallsCount": 6,
+                    "InvestigationCount": 2,
+                    "NHTSAElectronicStabilityControl": "Standard",
+                    "NHTSAForwardCollisionWarning": "No",
+                    "NHTSALaneDepartureWarning": "No",
+                }
+
+        source = {
+            "models": [
+                {
+                    "market_variant_id": "us-honda-crv",
+                    "canonical_model_id": "honda-cr-v",
+                    "market": "US",
+                    "brand": "Honda",
+                    "model": "CR-V",
+                    "profiles": [
+                        {
+                            "profile_id": "us-honda-crv-2020-2020-1.5-petrol-ex",
+                            "year_start": 2020,
+                            "year_end": 2020,
+                            "drivetrain": "fwd",
+                            "body_type": "suv",
+                            "fuel_type": "petrol",
+                            "trim": "EX",
+                        }
+                    ],
+                }
+            ]
+        }
+        client = FakeNhtsaClient()
+
+        result = build_safety_outputs(source, "US", client=client)
+
+        self.assertEqual(result.safety_ratings[0]["safety_rating_status"], "rated")
+        self.assertEqual(result.safety_ratings[0]["safety_rating_stars"], 5)
+        self.assertEqual(result.safety_ratings[0]["nhtsa_rating_details"][0]["vehicle_id"], 14820)
+
+    def test_market_build_overlays_safety_sync_fields(self) -> None:
+        source = {
+            "models": [
+                {
+                    "market_variant_id": "us-honda-crv",
+                    "canonical_model_id": "honda-cr-v",
+                    "market": "US",
+                    "brand": "Honda",
+                    "model": "CR-V",
+                    "display_name": "Honda CR-V",
+                    "canonical_model_slug": "cr-v",
+                    "aliases": ["Honda CR-V"],
+                    "local_aliases": ["Honda CR-V"],
+                    "year_start": 2020,
+                    "year_end": 2025,
+                    "body_types": ["suv"],
+                    "fuel_types": ["petrol"],
+                    "popularity_rank": 1,
+                    "brand_popularity_rank": 1,
+                    "source_label": "curated_seed",
+                    "match_tags": ["family"],
+                    "profiles": [
+                        {
+                            "profile_id": "us-honda-crv-2020-2020-1.5-petrol-ex",
+                            "title": "2020 Honda CR-V EX",
+                            "year_start": 2020,
+                            "year_end": 2020,
+                            "trim": "EX",
+                            "engine_description": "1.5L turbo petrol",
+                            "transmission": "cvt",
+                            "fuel_type": "petrol",
+                            "body_type": "suv",
+                            "fuel_consumption_l_per_100km": 7.4,
+                            "nvh_summary": "Quiet",
+                            "comfort_summary": "Comfortable",
+                            "space_summary": "Spacious",
+                            "reliability_summary": "Good",
+                            "common_issues": ["cvt servicing"],
+                            "maintenance_cost_band": "medium",
+                            "suitability_summary": "Family SUV",
+                            "base_msrp_nzd": 30700,
+                        }
+                    ],
+                    "knowledge": [],
+                }
+            ],
+            "eval_cases": [],
+        }
+        safety_rows = {
+            "us-honda-crv-2020-2020-1.5-petrol-ex": {
+                "safety_rating_stars": 5,
+                "safety_rating_source": "NHTSA SafetyRatings API",
+                "safety_rating_status": "rated",
+            }
+        }
+
+        result = build_outputs(source, "US", safety_rows=safety_rows)
+
+        self.assertEqual(result.vehicle_profiles[0]["safety_rating_stars"], 5)
+        self.assertEqual(result.vehicle_profiles[0]["safety_rating_source"], "NHTSA SafetyRatings API")
 
     def test_safety_sync_diff_detects_new_profile_rating(self) -> None:
         previous = {

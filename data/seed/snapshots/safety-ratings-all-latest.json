@@ -10,7 +10,8 @@
       "year_end": 2025,
       "safety_rating_stars": null,
       "safety_rating_source": null,
-      "safety_rating_status": "unrated"
+      "safety_rating_status": "unrated",
+      "nhtsa_rating_details": []
     },
     {
       "profile_id": "cn-byd-song-plus-2023-2025-dmi-premium",
@@ -22,7 +23,8 @@
       "year_end": 2025,
       "safety_rating_stars": null,
       "safety_rating_source": null,
-      "safety_rating_status": "unrated"
+      "safety_rating_status": "unrated",
+      "nhtsa_rating_details": []
     },
     {
       "profile_id": "cn-honda-crv-2021-2024-2.0-hybrid-premium",
@@ -34,7 +36,8 @@
       "year_end": 2024,
       "safety_rating_stars": null,
       "safety_rating_source": null,
-      "safety_rating_status": "unrated"
+      "safety_rating_status": "unrated",
+      "nhtsa_rating_details": []
     },
     {
       "profile_id": "cn-tesla-model-y-2022-2025-rwd",
@@ -46,7 +49,8 @@
       "year_end": 2025,
       "safety_rating_stars": null,
       "safety_rating_source": null,
-      "safety_rating_status": "unrated"
+      "safety_rating_status": "unrated",
+      "nhtsa_rating_details": []
     },
     {
       "profile_id": "cn-toyota-camry-2021-2024-2.5-hybrid-luxury",
@@ -58,7 +62,8 @@
       "year_end": 2024,
       "safety_rating_stars": null,
       "safety_rating_source": null,
-      "safety_rating_status": "unrated"
+      "safety_rating_status": "unrated",
+      "nhtsa_rating_details": []
     },
     {
       "profile_id": "us-honda-crv-2020-2022-1.5-petrol-ex",
@@ -69,8 +74,67 @@
       "year_start": 2020,
       "year_end": 2022,
       "safety_rating_stars": 5,
-      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
-      "safety_rating_status": "rated"
+      "safety_rating_source": "NHTSA SafetyRatings API",
+      "safety_rating_status": "rated",
+      "nhtsa_rating_details": [
+        {
+          "year": 2020,
+          "model_queries": [
+            "CR-V"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 14820,
+          "vehicle_description": "2020 Honda CR-V SUV FWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "5",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "4",
+          "complaints_count": 313,
+          "recalls_count": 6,
+          "investigation_count": 2,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        },
+        {
+          "year": 2021,
+          "model_queries": [
+            "CR-V"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 15733,
+          "vehicle_description": "2021 Honda CR-V SUV FWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "5",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "4",
+          "complaints_count": 278,
+          "recalls_count": 3,
+          "investigation_count": 2,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        },
+        {
+          "year": 2022,
+          "model_queries": [
+            "CR-V"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 16479,
+          "vehicle_description": "2022 Honda CR-V SUV FWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "5",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "4",
+          "complaints_count": 197,
+          "recalls_count": 2,
+          "investigation_count": 2,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        }
+      ]
     },
     {
       "profile_id": "us-honda-civic-2022-2024-2.0-petrol-sport",
@@ -81,8 +145,43 @@
       "year_start": 2022,
       "year_end": 2024,
       "safety_rating_stars": 5,
-      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
-      "safety_rating_status": "rated"
+      "safety_rating_source": "NHTSA SafetyRatings API",
+      "safety_rating_status": "rated",
+      "nhtsa_rating_details": [
+        {
+          "year": 2022,
+          "model_queries": [
+            "Civic"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 16478,
+          "vehicle_description": "2022 Honda CIVIC 4 DR FWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "4",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "5",
+          "complaints_count": 872,
+          "recalls_count": 3,
+          "investigation_count": 2,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        },
+        {
+          "year": 2023,
+          "model_queries": [
+            "Civic"
+          ],
+          "lookup_status": "no_match"
+        },
+        {
+          "year": 2024,
+          "model_queries": [
+            "Civic"
+          ],
+          "lookup_status": "no_match"
+        }
+      ]
     },
     {
       "profile_id": "us-tesla-model-y-2021-2024-long-range-awd",
@@ -92,9 +191,47 @@
       "model": "Model Y",
       "year_start": 2021,
       "year_end": 2024,
-      "safety_rating_stars": 5,
-      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
-      "safety_rating_status": "rated"
+      "safety_rating_stars": null,
+      "safety_rating_source": null,
+      "safety_rating_status": "unrated",
+      "nhtsa_rating_details": [
+        {
+          "year": 2021,
+          "model_queries": [
+            "Model Y",
+            "ModelY",
+            "Y"
+          ],
+          "lookup_status": "no_match"
+        },
+        {
+          "year": 2022,
+          "model_queries": [
+            "Model Y",
+            "ModelY",
+            "Y"
+          ],
+          "lookup_status": "no_match"
+        },
+        {
+          "year": 2023,
+          "model_queries": [
+            "Model Y",
+            "ModelY",
+            "Y"
+          ],
+          "lookup_status": "no_match"
+        },
+        {
+          "year": 2024,
+          "model_queries": [
+            "Model Y",
+            "ModelY",
+            "Y"
+          ],
+          "lookup_status": "no_match"
+        }
+      ]
     },
     {
       "profile_id": "us-toyota-camry-2021-2023-2.5-hybrid-le",
@@ -105,8 +242,67 @@
       "year_start": 2021,
       "year_end": 2023,
       "safety_rating_stars": 5,
-      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
-      "safety_rating_status": "rated"
+      "safety_rating_source": "NHTSA SafetyRatings API",
+      "safety_rating_status": "rated",
+      "nhtsa_rating_details": [
+        {
+          "year": 2021,
+          "model_queries": [
+            "Camry"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 15820,
+          "vehicle_description": "2021 Toyota CAMRY 4 DR FWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "5",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "5",
+          "complaints_count": 150,
+          "recalls_count": 1,
+          "investigation_count": 0,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        },
+        {
+          "year": 2022,
+          "model_queries": [
+            "Camry"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 16632,
+          "vehicle_description": "2022 Toyota CAMRY 4 DR FWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "5",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "5",
+          "complaints_count": 52,
+          "recalls_count": 1,
+          "investigation_count": 0,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        },
+        {
+          "year": 2023,
+          "model_queries": [
+            "Camry"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 18954,
+          "vehicle_description": "2023 Toyota CAMRY Later Release 4 DR FWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "5",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "5",
+          "complaints_count": 0,
+          "recalls_count": 0,
+          "investigation_count": 0,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        }
+      ]
     },
     {
       "profile_id": "us-toyota-rav4-2020-2022-2.5-hybrid-xle",
@@ -117,8 +313,67 @@
       "year_start": 2020,
       "year_end": 2022,
       "safety_rating_stars": 5,
-      "safety_rating_source": "NHTSA 5-Star Safety Ratings",
-      "safety_rating_status": "rated"
+      "safety_rating_source": "NHTSA SafetyRatings API",
+      "safety_rating_status": "rated",
+      "nhtsa_rating_details": [
+        {
+          "year": 2020,
+          "model_queries": [
+            "RAV4"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 14693,
+          "vehicle_description": "2020 Toyota RAV4 SUV AWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "4",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "4",
+          "complaints_count": 611,
+          "recalls_count": 6,
+          "investigation_count": 0,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        },
+        {
+          "year": 2021,
+          "model_queries": [
+            "RAV4"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 15849,
+          "vehicle_description": "2021 Toyota RAV4 SUV AWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "4",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "4",
+          "complaints_count": 361,
+          "recalls_count": 1,
+          "investigation_count": 0,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        },
+        {
+          "year": 2022,
+          "model_queries": [
+            "RAV4"
+          ],
+          "lookup_status": "matched",
+          "vehicle_id": 16665,
+          "vehicle_description": "2022 Toyota RAV4 SUV AWD",
+          "overall_rating": "5",
+          "overall_front_crash_rating": "4",
+          "overall_side_crash_rating": "5",
+          "rollover_rating": "4",
+          "complaints_count": 121,
+          "recalls_count": 1,
+          "investigation_count": 0,
+          "electronic_stability_control": "Standard",
+          "forward_collision_warning": "Standard",
+          "lane_departure_warning": "Standard"
+        }
+      ]
     }
   ]
 }
